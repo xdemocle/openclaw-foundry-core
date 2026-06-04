@@ -31,11 +31,20 @@ import {
   readdirSync,
   unlinkSync,
   rmSync,
+  renameSync,
 } from "node:fs";
 import { spawn, exec } from "node:child_process";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
+
+// Atomic JSON write: serialize to a temp sibling then rename (atomic on POSIX)
+// so a crash mid-write cannot truncate or corrupt the destination file.
+function atomicWriteJson(path: string, data: unknown): void {
+  const tmp = `${path}.tmp`;
+  writeFileSync(tmp, JSON.stringify(data, null, 2));
+  renameSync(tmp, path);
+}
 
 // ── Documentation URLs ───────────────────────────────────────────────────────
 
@@ -777,7 +786,7 @@ class CodeWriter {
   private saveManifest(): void {
     const dir = join(this.manifestPath, "..");
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    writeFileSync(this.manifestPath, JSON.stringify(this.manifest, null, 2));
+    atomicWriteJson(this.manifestPath, this.manifest);
   }
 
   private loadOpenClawDocs(): void {
@@ -915,6 +924,61 @@ class CodeWriter {
     this.logger?.info(
       `[foundry] Wrote extension: ${def.id} (${validation.warnings.length} warnings, ${validation.securityFlags.length} flags)`,
     );
+    return { path: extDir, validation };
+  }
+
+  // Write an extension from pre-existing source code (e.g. a downloaded
+  // marketplace ability). Validates the raw source (static scan + sandbox)
+  // before writing. Throws if validation fails.
+  async writeRawExtension(
+    def: { id: string; name: string; description: string; code: string },
+    validator?: CodeValidator,
+  ): Promise<{ path: string; validation: ValidationResult }> {
+    let validation: ValidationResult = {
+      valid: true,
+      errors: [],
+      warnings: [],
+      securityFlags: [],
+    };
+    if (validator) {
+      validation = await validator.validate(def.code, "extension");
+      if (!validation.valid) {
+        throw new Error(
+          `Code validation failed: ${validation.errors.join(", ")}`,
+        );
+      }
+      const sandboxResult = await validator.testInSandbox(
+        def.code,
+        join(this.dataDir, "sandbox"),
+      );
+      if (!sandboxResult.success) {
+        throw new Error(`Sandbox test failed: ${sandboxResult.error}`);
+      }
+    }
+
+    const extDir = join(this.extensionsDir, def.id);
+    if (!existsSync(extDir)) mkdirSync(extDir, { recursive: true });
+    writeFileSync(join(extDir, "index.ts"), def.code);
+    writeFileSync(
+      join(extDir, "openclaw.plugin.json"),
+      PLUGIN_JSON_TEMPLATE.replace(/\{\{ID\}\}/g, def.id)
+        .replace(/\{\{NAME\}\}/g, def.name)
+        .replace(/\{\{DESCRIPTION\}\}/g, def.description),
+    );
+
+    const full: ExtensionDef = {
+      id: def.id,
+      name: def.name,
+      description: def.description,
+      tools: [],
+      hooks: [],
+      createdAt: new Date().toISOString(),
+    };
+    const idx = this.manifest.extensions.findIndex((e) => e.id === def.id);
+    if (idx >= 0) this.manifest.extensions[idx] = full;
+    else this.manifest.extensions.push(full);
+    this.saveManifest();
+
     return { path: extDir, validation };
   }
 
@@ -1288,7 +1352,7 @@ class LearningEngine {
 
   private saveMetrics(): void {
     const obj = Object.fromEntries(this.toolMetrics);
-    writeFileSync(this.metricsPath, JSON.stringify(obj, null, 2));
+    atomicWriteJson(this.metricsPath, obj);
   }
 
   // ADAS: Record tool execution for fitness tracking
@@ -1337,7 +1401,25 @@ class LearningEngine {
   }
 
   private saveLearnings(): void {
-    writeFileSync(this.learningsPath, JSON.stringify(this.learnings, null, 2));
+    this.enforceLearningCaps();
+    atomicWriteJson(this.learningsPath, this.learnings);
+  }
+
+  // Bound unbounded growth: keep only the most recent failures and insights
+  // (successes are capped elsewhere; resolved patterns are pruned by the Overseer).
+  private enforceLearningCaps(): void {
+    const MAX_FAILURES = 200;
+    const MAX_INSIGHTS = 200;
+    for (const [type, max] of [
+      ["failure", MAX_FAILURES],
+      ["insight", MAX_INSIGHTS],
+    ] as [string, number][]) {
+      const ofType = this.learnings.filter((l) => l.type === type);
+      if (ofType.length > max) {
+        const remove = new Set(ofType.slice(0, ofType.length - max));
+        this.learnings = this.learnings.filter((l) => !remove.has(l));
+      }
+    }
   }
 
   private loadPendingSession(): void {
@@ -1637,7 +1719,8 @@ ${escapedResolution}
     const stalePruned = this.learnings.filter((l) => {
       if (l.type !== "pattern" || l.crystallizedTo) return false;
       const ts = new Date(l.timestamp).getTime();
-      return ts < thirtyDaysAgo && (l.useCount || 0) === 0;
+      const isOld = Number.isNaN(ts) || ts < thirtyDaysAgo;
+      return isOld && (l.useCount || 0) === 0;
     });
 
     if (stalePruned.length > 0) {
@@ -1687,8 +1770,14 @@ ${escapedResolution}
   startOverseer(intervalMs = 60 * 60 * 1000, dataDir?: string): void {
     if (this.overseerInterval) return;
     this.overseerInterval = setInterval(() => {
-      this.runOverseer(dataDir);
+      try {
+        this.runOverseer(dataDir);
+      } catch (err) {
+        this.logger?.warn?.(`[foundry] Overseer run failed: ${err}`);
+      }
     }, intervalMs);
+    // Don't let the interval keep the process alive on shutdown.
+    (this.overseerInterval as any)?.unref?.();
     this.logger?.info(
       `[foundry] Autonomous overseer started (interval: ${intervalMs}ms)`,
     );
@@ -1832,10 +1921,7 @@ ${escapedResolution}
       ...session,
       createdAt: new Date().toISOString(),
     };
-    writeFileSync(
-      this.pendingSessionPath,
-      JSON.stringify(this.pendingSession, null, 2),
-    );
+    atomicWriteJson(this.pendingSessionPath, this.pendingSession);
     this.logger?.info(`[foundry] Saved pending session: ${session.reason}`);
   }
 
@@ -1873,10 +1959,10 @@ ${escapedResolution}
   }
 
   private saveOutcomes(): void {
-    writeFileSync(this.outcomesPath, JSON.stringify(this.outcomes, null, 2));
-    writeFileSync(
+    atomicWriteJson(this.outcomesPath, this.outcomes);
+    atomicWriteJson(
       this.insightsPath,
-      JSON.stringify(Object.fromEntries(this.taskTypeInsights), null, 2),
+      Object.fromEntries(this.taskTypeInsights),
     );
   }
 
@@ -2189,24 +2275,31 @@ ${escapedResolution}
     if (this.feedbackCollectionInterval) return;
 
     this.feedbackCollectionInterval = setInterval(async () => {
-      const pending = this.getPendingFeedback();
-      this.logger?.info(
-        `[foundry] Checking feedback for ${pending.length} pending outcomes`,
-      );
+      try {
+        const pending = this.getPendingFeedback();
+        this.logger?.info(
+          `[foundry] Checking feedback for ${pending.length} pending outcomes`,
+        );
 
-      for (const outcome of pending) {
-        try {
-          const metrics = await collectFn(outcome);
-          if (metrics) {
-            this.recordFeedback(outcome.id, metrics, "auto_collection");
+        for (const outcome of pending) {
+          try {
+            const metrics = await collectFn(outcome);
+            if (metrics) {
+              this.recordFeedback(outcome.id, metrics, "auto_collection");
+            }
+          } catch (err) {
+            this.logger?.warn?.(
+              `[foundry] Failed to collect feedback for ${outcome.id}: ${err}`,
+            );
           }
-        } catch (err) {
-          this.logger?.warn?.(
-            `[foundry] Failed to collect feedback for ${outcome.id}: ${err}`,
-          );
         }
+      } catch (err) {
+        this.logger?.warn?.(
+          `[foundry] Feedback collection cycle failed: ${err}`,
+        );
       }
     }, intervalMs);
+    (this.feedbackCollectionInterval as any)?.unref?.();
 
     this.logger?.info(
       `[foundry] Feedback collection started (interval: ${intervalMs}ms)`,
@@ -2309,11 +2402,10 @@ ${escapedResolution}
   }
 
   private saveWorkflows(): void {
-    writeFileSync(this.workflowsPath, JSON.stringify(this.workflows, null, 2));
-    const patternsObj = Object.fromEntries(this.workflowPatterns);
-    writeFileSync(
+    atomicWriteJson(this.workflowsPath, this.workflows);
+    atomicWriteJson(
       this.workflowPatternsPath,
-      JSON.stringify(patternsObj, null, 2),
+      Object.fromEntries(this.workflowPatterns),
     );
   }
 
@@ -2849,6 +2941,9 @@ export default {
 
     // Track current failure for resolution matching
     let lastFailureId: string | null = null;
+    // Tool that produced lastFailureId — a resolution is only recorded when the
+    // SAME tool later succeeds (prevents cross-tool failure→success mislabeling).
+    let lastFailureTool: string | null = null;
     // RISE: Track pattern used for injection (to detect successful retries)
     let lastInjectedPatternId: string | null = null;
     let lastInjectedForTool: string | null = null;
@@ -4551,20 +4646,34 @@ ${p.toolCode
                 }
 
                 if (abilityType === "extension") {
-                  // Write extension to extensions directory
+                  // Write the downloaded extension source to disk, validated.
                   const content = (ability as any).content;
                   if (content?.code) {
                     const extId =
                       (ability as any).service
                         ?.toLowerCase()
                         .replace(/[^a-z0-9]+/g, "-") || "imported-ext";
-                    const result = await writer.writeExtension({
-                      id: extId,
-                      name: (ability as any).service,
-                      description: content.description || "",
-                      tools: [],
-                      hooks: [],
-                    });
+                    let result;
+                    try {
+                      result = await writer.writeRawExtension(
+                        {
+                          id: extId,
+                          name: (ability as any).service || extId,
+                          description: content.description || "",
+                          code: content.code,
+                        },
+                        codeValidator,
+                      );
+                    } catch (err: any) {
+                      return {
+                        content: [
+                          {
+                            type: "text",
+                            text: `Downloaded extension "${extId}" failed validation and was NOT installed: ${err?.message || err}`,
+                          },
+                        ],
+                      };
+                    }
 
                     return {
                       content: [
@@ -5824,6 +5933,7 @@ Apply this resolution to the current failure.
           ctx?.lastUserMessage?.slice(0, 200),
           feedback,
         );
+        lastFailureTool = toolName || "unknown";
       } else {
         // RISE: Check if this success followed a pattern injection
         if (lastInjectedPatternId && lastInjectedForTool === toolName) {
@@ -5881,12 +5991,13 @@ ${escapedResolution}
         }
 
         // Record success and potential resolution
-        if (lastFailureId && toolName) {
+        if (lastFailureId && toolName && lastFailureTool === toolName) {
           learningEngine.recordResolution(
             lastFailureId,
             `Succeeded after retry with ${toolName}`,
           );
           lastFailureId = null;
+          lastFailureTool = null;
         }
       }
     });
@@ -5919,6 +6030,7 @@ ${escapedResolution}
 
       // Clear any pending failure tracking
       lastFailureId = null;
+      lastFailureTool = null;
     });
 
     const features = [
