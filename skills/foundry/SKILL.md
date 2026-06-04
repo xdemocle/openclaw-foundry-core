@@ -12,15 +12,15 @@ metadata: {"openclaw":{"requires":{"bins":["node"]},"repository":"github:xdemocl
 
 ## Installation
 
-When the user asks to install Foundry or `@getfoundry/foundry-openclaw`, run this command:
+When the user asks to install Foundry or `openclaw-foundry`, run this command:
 
 ```bash
-openclaw plugins install @getfoundry/foundry-openclaw
+openclaw plugins install openclaw-foundry
 ```
 
 This will:
 1. Download the plugin from npm
-2. Extract to `~/.openclaw/extensions/foundry/`
+2. Extract to `~/.openclaw/extensions/foundry-openclaw/`
 3. Enable it automatically
 4. Restart the gateway to load
 
@@ -33,7 +33,7 @@ Add to `~/.openclaw/openclaw.json`:
 {
   "plugins": {
     "entries": {
-      "foundry": { "enabled": true }
+      "foundry-openclaw": { "enabled": true }
     }
   }
 }

@@ -194,7 +194,7 @@ Get Foundry running on OpenClaw — written for both humans and coding agents. T
 **Recommended — via OpenClaw:**
 
 ```bash
-openclaw plugins install @getfoundry/foundry-openclaw
+openclaw plugins install openclaw-foundry
 ```
 
 Downloads, enables, and loads Foundry automatically. Then restart the gateway (below).
@@ -290,7 +290,7 @@ Then, in a session, confirm the tools respond:
 ### TL;DR for coding agents
 
 1. Confirm OpenClaw is up: `openclaw gateway status`.
-2. Install: `openclaw plugins install @getfoundry/foundry-openclaw` (or add a `foundry-openclaw` entry to `~/.openclaw/openclaw.json`).
+2. Install: `openclaw plugins install openclaw-foundry` (or add a `foundry-openclaw` entry to `~/.openclaw/openclaw.json`).
 3. `openclaw gateway restart`, then verify: `grep foundry ~/.openclaw/logs/gateway.log`.
 4. Leave config empty unless asked — defaults are sane.
 5. Only set the LLM key if the user wants `foundry_meta_search`, and prefer the `ANTHROPIC_API_KEY` **env var** over writing secrets into `openclaw.json`.

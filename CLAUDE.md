@@ -400,7 +400,7 @@ Enable with: `openclaw hooks enable welcome-message`
 1. **Setup package.json** for npm:
 ```json
 {
-  "name": "@getfoundry/foundry",
+  "name": "openclaw-foundry",
   "version": "0.2.0",
   "repository": { "type": "git", "url": "https://github.com/xdemocle/openclaw-foundry" },
   "moltbot": { "extensions": ["./index.ts"] },
