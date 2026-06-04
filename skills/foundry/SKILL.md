@@ -12,10 +12,10 @@ metadata: {"openclaw":{"requires":{"bins":["node"]},"repository":"github:xdemocl
 
 ## Installation
 
-When the user asks to install Foundry or `openclaw-foundry`, run this command:
+When the user asks to install Foundry or `openclaw-foundry-core`, run this command:
 
 ```bash
-openclaw plugins install openclaw-foundry
+openclaw plugins install openclaw-foundry-core
 ```
 
 This will:
