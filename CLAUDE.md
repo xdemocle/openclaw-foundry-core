@@ -402,7 +402,7 @@ Enable with: `openclaw hooks enable welcome-message`
 {
   "name": "@getfoundry/foundry",
   "version": "0.2.0",
-  "repository": { "type": "git", "url": "https://github.com/lekt9/openclaw-foundry" },
+  "repository": { "type": "git", "url": "https://github.com/xdemocle/openclaw-foundry" },
   "moltbot": { "extensions": ["./index.ts"] },
   "openclaw": { "extensions": ["./index.ts"] },
   "peerDependencies": { "moltbot": "*", "openclaw": "*" },

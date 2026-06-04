@@ -8,6 +8,8 @@
 
 Foundry is a self-writing meta-extension for [OpenClaw](https://github.com/lekt9/openclaw) that learns how you work, researches documentation, and writes new capabilities into itself. It observes your workflows, crystallizes patterns into tools, and upgrades itself to match how you operate.
 
+> **Fork notice.** This is a maintained, self-enclosed fork of the original [Foundry](https://github.com/lekt9/openclaw-foundry) (formerly `getfoundry.app`) by **lekt9**, which appears abandoned. This version **removes the crowdsourced marketplace, x402/Solana payments, and the `$FDRY` token** — Foundry now only researches docs, learns from your workflows, and writes local extensions/skills/hooks. There is **no third-party publish or install**.
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                         FOUNDRY                             │
@@ -202,14 +204,14 @@ Downloads, enables, and loads Foundry automatically. Then restart the gateway (b
 ```json
 { "plugins": { "entries": { "foundry-openclaw": {
   "enabled": true,
-  "source": "github:lekt9/openclaw-foundry"
+  "source": "github:xdemocle/openclaw-foundry"
 }}}}
 ```
 
 **Manual clone:**
 
 ```bash
-git clone https://github.com/lekt9/openclaw-foundry ~/.openclaw/extensions/foundry-openclaw
+git clone https://github.com/xdemocle/openclaw-foundry ~/.openclaw/extensions/foundry-openclaw
 cd ~/.openclaw/extensions/foundry-openclaw && npm install   # installs devDeps + builds dist/
 ```
 

@@ -3,7 +3,7 @@
   "name": "Foundry",
   "description": "Self-writing meta-extension that forges new capabilities — researches docs, writes extensions, tools, hooks, and skills",
   "version": "0.2.3",
-  "repository": "github:lekt9/openclaw-foundry",
+  "repository": "github:xdemocle/openclaw-foundry",
   "skills": ["./skills"],
   "configSchema": {
     "type": "object",

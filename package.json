@@ -31,13 +31,13 @@
     "code-generation",
     "plugin"
   ],
-  "author": "Foundry <hello@getfoundry.app>",
+  "author": "xdemocle <xdemocle@gmail.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lekt9/openclaw-foundry"
+    "url": "https://github.com/xdemocle/openclaw-foundry"
   },
-  "homepage": "https://getfoundry.app",
+  "homepage": "https://github.com/xdemocle/openclaw-foundry",
   "moltbot": {
     "extensions": [
       "./index.ts"
