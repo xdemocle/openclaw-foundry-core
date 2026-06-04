@@ -2878,7 +2878,7 @@ function toMethodName(method: string, path: string): string {
 // ── Plugin ───────────────────────────────────────────────────────────────────
 
 export default {
-  id: "foundry-openclaw",
+  id: "openclaw-foundry-core",
   name: "Foundry",
   description:
     "Self-writing coding subagent — researches and implements capabilities",

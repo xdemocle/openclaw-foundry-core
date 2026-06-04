@@ -202,7 +202,7 @@ Downloads, enables, and loads Foundry automatically. Then restart the gateway (b
 **From GitHub source** — add to `~/.openclaw/openclaw.json` (a build runs automatically on source installs via the `prepare` script):
 
 ```json
-{ "plugins": { "entries": { "foundry-openclaw": {
+{ "plugins": { "entries": { "openclaw-foundry-core": {
   "enabled": true,
   "source": "github:xdemocle/openclaw-foundry"
 }}}}
@@ -211,8 +211,8 @@ Downloads, enables, and loads Foundry automatically. Then restart the gateway (b
 **Manual clone:**
 
 ```bash
-git clone https://github.com/xdemocle/openclaw-foundry ~/.openclaw/extensions/foundry-openclaw
-cd ~/.openclaw/extensions/foundry-openclaw && npm install   # installs devDeps + builds dist/
+git clone https://github.com/xdemocle/openclaw-foundry ~/.openclaw/extensions/openclaw-foundry-core
+cd ~/.openclaw/extensions/openclaw-foundry-core && npm install   # installs devDeps + builds dist/
 ```
 
 Apply any of the above with a restart:
@@ -221,11 +221,11 @@ Apply any of the above with a restart:
 openclaw gateway restart
 ```
 
-> ⚠️ The plugin id is **`foundry-openclaw`**. Use that exact key in `openclaw.json` and as the install directory name (not `foundry`).
+> ⚠️ The plugin id is **`openclaw-foundry-core`**. Use that exact key in `openclaw.json` and as the install directory name (not `foundry`).
 
 ### 2. Configure (optional — Foundry runs with zero config)
 
-All keys live under `plugins.entries.foundry-openclaw.config`:
+All keys live under `plugins.entries.openclaw-foundry-core.config`:
 
 | Key | Default | What it does |
 |-----|---------|--------------|
@@ -238,7 +238,7 @@ All keys live under `plugins.entries.foundry-openclaw.config`:
 Minimal example:
 
 ```json
-{ "plugins": { "entries": { "foundry-openclaw": {
+{ "plugins": { "entries": { "openclaw-foundry-core": {
   "enabled": true,
   "config": {
     "dataDir": "~/.openclaw/foundry"
@@ -290,7 +290,7 @@ Then, in a session, confirm the tools respond:
 ### TL;DR for coding agents
 
 1. Confirm OpenClaw is up: `openclaw gateway status`.
-2. Install: `openclaw plugins install openclaw-foundry-core` (or add a `foundry-openclaw` entry to `~/.openclaw/openclaw.json`).
+2. Install: `openclaw plugins install openclaw-foundry-core` (or add a `openclaw-foundry-core` entry to `~/.openclaw/openclaw.json`).
 3. `openclaw gateway restart`, then verify: `grep foundry ~/.openclaw/logs/gateway.log`.
 4. Leave config empty unless asked — defaults are sane.
 5. Only set the LLM key if the user wants `foundry_meta_search`, and prefer the `ANTHROPIC_API_KEY` **env var** over writing secrets into `openclaw.json`.
@@ -474,10 +474,10 @@ Generated code is validated before deployment:
 
 ## Configuration
 
-All options live under `plugins.entries.foundry-openclaw.config` — see the [Setup Guide](#setup-guide) for walkthroughs. The full schema:
+All options live under `plugins.entries.openclaw-foundry-core.config` — see the [Setup Guide](#setup-guide) for walkthroughs. The full schema:
 
 ```json
-{ "plugins": { "entries": { "foundry-openclaw": {
+{ "plugins": { "entries": { "openclaw-foundry-core": {
   "enabled": true,
   "config": {
     "dataDir": "~/.openclaw/foundry",

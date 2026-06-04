@@ -20,7 +20,7 @@ openclaw plugins install openclaw-foundry-core
 
 This will:
 1. Download the plugin from npm
-2. Extract to `~/.openclaw/extensions/foundry-openclaw/`
+2. Extract to `~/.openclaw/extensions/openclaw-foundry-core/`
 3. Enable it automatically
 4. Restart the gateway to load
 
@@ -33,7 +33,7 @@ Add to `~/.openclaw/openclaw.json`:
 {
   "plugins": {
     "entries": {
-      "foundry-openclaw": { "enabled": true }
+      "openclaw-foundry-core": { "enabled": true }
     }
   }
 }
@@ -47,7 +47,7 @@ Configuration options in `~/.openclaw/openclaw.json` (all optional — Foundry r
 {
   "plugins": {
     "entries": {
-      "foundry-openclaw": {
+      "openclaw-foundry-core": {
         "enabled": true,
         "source": "github:xdemocle/openclaw-foundry",
         "config": {
