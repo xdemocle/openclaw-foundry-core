@@ -37,10 +37,16 @@ foundry_marketplace      — Search, leaderboard, install abilities
 
 ### Type Check / Build
 ```bash
-npx tsc --noEmit       # canonical check — reads tsconfig.json
-npm run build          # alias for `tsc -p tsconfig.json` (noEmit; host runs .ts directly)
+npx tsc --noEmit       # canonical type check — reads tsconfig.json, emits nothing
 npm run typecheck      # same as the canonical check
+npm run build          # `tsc -p tsconfig.json` → emits JS + d.ts + sourcemaps to dist/
+npm run clean          # rm -rf dist
 ```
+
+`dist/` is the build output (git-ignored) and is what `package.json` `main` (`dist/index.js`)
+points to for npm consumers. The **gateway host loads `./index.ts` directly** (see the plugin
+manifests), so a build is only needed for publishing — not for local gateway testing. The repo is
+TypeScript-only: there are no committed `.js` artifacts.
 
 > ⚠️ **Never run `tsc index.ts`.** Passing a filename makes `tsc` ignore `tsconfig.json`
 > and fall back to default options (old `target`, no `downlevelIteration`, no `skipLibCheck`).

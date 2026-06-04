@@ -75,6 +75,35 @@ export class SkillIndexClient {
     this.opts = opts;
   }
 
+  /**
+   * Derive the wallet address (base58 ed25519 public key) and a detached signer
+   * from the configured base58 Solana secret key. Uses tweetnacl + bs58 directly
+   * so the heavyweight @solana/web3.js dependency is not required.
+   */
+  protected async loadKeypair(): Promise<{
+    wallet: string;
+    sign: (message: Uint8Array) => Uint8Array;
+  }> {
+    if (!this.solanaPrivateKey) {
+      throw new Error(
+        "No Solana private key configured. Required to sign publish requests."
+      );
+    }
+    const nacl = await import("tweetnacl");
+    const bs58 = await import("bs58");
+    try {
+      const secretKey = bs58.default.decode(this.solanaPrivateKey);
+      const keypair = nacl.default.sign.keyPair.fromSecretKey(secretKey);
+      return {
+        wallet: bs58.default.encode(keypair.publicKey),
+        sign: (message: Uint8Array) =>
+          nacl.default.sign.detached(message, keypair.secretKey),
+      };
+    } catch {
+      throw new Error("Invalid Solana private key. Must be base58-encoded.");
+    }
+  }
+
   /** Search the skill index (free). */
   async search(
     query: string,
@@ -123,13 +152,14 @@ export class SkillIndexClient {
   }
 
   /**
-   * Download a skill package (x402 payment required).
+   * Download a skill package.
    *
-   * Handles the 402 → sign → retry flow using a Solana keypair.
-   * Falls back to free download if the server has no x402 gate (dev mode).
+   * Free downloads (server returns 200) are supported. Paid abilities gated
+   * behind x402 on-chain payment are NOT supported in this build — the Solana
+   * transaction dependencies were removed. Such downloads fail with a clear
+   * error rather than attempting an on-chain USDC transfer.
    */
   async download(id: string): Promise<SkillPackage> {
-    // Step 1: Initial request — may return 200 (free) or 402
     const resp = await fetch(`${this.indexUrl}/skills/${encodeURIComponent(id)}/download`, {
       signal: AbortSignal.timeout(15_000),
     });
@@ -139,143 +169,15 @@ export class SkillIndexClient {
       return resp.json() as Promise<SkillPackage>;
     }
 
-    if (resp.status !== 402) {
-      const text = await resp.text().catch(() => "");
-      throw new Error(`Download failed (${resp.status}): ${text}`);
-    }
-
-    // Step 2: We got a 402 — need to pay
-    if (!this.solanaPrivateKey) {
+    if (resp.status === 402) {
       throw new Error(
-        "No Solana private key configured for x402 payments. " +
-        "Set skillIndexSolanaPrivateKey in unbrowse config or UNBROWSE_SOLANA_PRIVATE_KEY env var.",
+        "This ability requires an x402 on-chain payment, which is not supported in this build. " +
+        "Only free abilities can be downloaded.",
       );
     }
 
-    const paymentReq = await resp.json();
-    const accepts = paymentReq?.accepts?.[0];
-    if (!accepts) {
-      throw new Error("Invalid 402 response: no payment requirements");
-    }
-
-    // Step 3: Build and sign the Solana x402 transaction
-    const paymentData = await this.buildAndSignPayment(accepts);
-
-    // Step 4: Retry with X-Payment header
-    const retryResp = await fetch(`${this.indexUrl}/skills/${encodeURIComponent(id)}/download`, {
-      headers: { "X-Payment": paymentData },
-      signal: AbortSignal.timeout(30_000),
-    });
-
-    if (!retryResp.ok) {
-      const text = await retryResp.text().catch(() => "");
-      throw new Error(`Download failed after payment (${retryResp.status}): ${text}`);
-    }
-
-    return retryResp.json() as Promise<SkillPackage>;
-  }
-
-  /**
-   * Build and sign a Solana x402 payment transaction.
-   * Returns base64-encoded X-Payment header value.
-   */
-  private async buildAndSignPayment(accepts: {
-    maxAmountRequired: string;
-    payTo: string;
-    asset: string;
-    network: string;
-    extra?: { feePayer?: string; programId?: string };
-  }): Promise<string> {
-    const {
-      Connection,
-      PublicKey,
-      Transaction,
-      TransactionInstruction,
-      Keypair,
-      SystemProgram,
-    } = await import("@solana/web3.js");
-    const { getAssociatedTokenAddress, createTransferInstruction } =
-      await import("@solana/spl-token");
-
-    // Decode private key
-    let keypair: InstanceType<typeof Keypair>;
-    try {
-      const bs58 = await import("bs58");
-      keypair = Keypair.fromSecretKey(bs58.default.decode(this.solanaPrivateKey!));
-    } catch {
-      throw new Error("Invalid Solana private key. Must be base58-encoded.");
-    }
-
-    const isDevnet = accepts.network?.includes("devnet");
-    const rpcUrl = isDevnet ? "https://api.devnet.solana.com" : "https://api.mainnet-beta.solana.com";
-    const connection = new Connection(rpcUrl, "confirmed");
-
-    const amount = BigInt(accepts.maxAmountRequired);
-    const usdcMint = new PublicKey(accepts.asset);
-    const recipient = new PublicKey(accepts.payTo);
-    const programId = new PublicKey(
-      accepts.extra?.programId ?? "5g8XvMcpWEgHitW7abiYTr1u8sDasePLQnrebQyCLPvY",
-    );
-
-    // Get token accounts
-    const payerTokenAccount = await getAssociatedTokenAddress(usdcMint, keypair.publicKey);
-    const recipientTokenAccount = await getAssociatedTokenAddress(usdcMint, recipient);
-
-    // Build nonce
-    const nonce = BigInt(Date.now());
-
-    // Build verify_payment instruction: [0x00, amount(u64 LE), nonce(u64 LE)]
-    const verifyData = Buffer.alloc(17);
-    verifyData[0] = 0;
-    verifyData.writeBigUInt64LE(amount, 1);
-    verifyData.writeBigUInt64LE(nonce, 9);
-
-    const verifyInstruction = new TransactionInstruction({
-      programId,
-      keys: [
-        { pubkey: keypair.publicKey, isSigner: true, isWritable: false },
-      ],
-      data: verifyData,
-    });
-
-    // SPL token transfer
-    const transferInstruction = createTransferInstruction(
-      payerTokenAccount,
-      recipientTokenAccount,
-      keypair.publicKey,
-      Number(amount),
-    );
-
-    // Build settle_payment instruction: [0x01, nonce(u64 LE)]
-    const settleData = Buffer.alloc(9);
-    settleData[0] = 1;
-    settleData.writeBigUInt64LE(nonce, 1);
-
-    const settleInstruction = new TransactionInstruction({
-      programId,
-      keys: [
-        { pubkey: keypair.publicKey, isSigner: true, isWritable: false },
-      ],
-      data: settleData,
-    });
-
-    // Build transaction
-    const tx = new Transaction();
-    tx.add(verifyInstruction);
-    tx.add(transferInstruction);
-    tx.add(settleInstruction);
-
-    const latestBlockhash = await connection.getLatestBlockhash();
-    tx.recentBlockhash = latestBlockhash.blockhash;
-    tx.feePayer = keypair.publicKey;
-    tx.sign(keypair);
-
-    // Encode as X-Payment header
-    const paymentPayload = {
-      transaction: Buffer.from(tx.serialize()).toString("base64"),
-    };
-
-    return Buffer.from(JSON.stringify(paymentPayload)).toString("base64");
+    const text = await resp.text().catch(() => "");
+    throw new Error(`Download failed (${resp.status}): ${text}`);
   }
 
   /**
@@ -283,30 +185,12 @@ export class SkillIndexClient {
    * Requires signing the message with the creator's private key to prove wallet ownership.
    */
   async publish(payload: PublishPayload): Promise<PublishResult> {
-    if (!this.solanaPrivateKey) {
-      throw new Error(
-        "No Solana private key configured. Required to sign publish requests."
-      );
-    }
-
-    // Import Solana libraries
-    const { Keypair } = await import("@solana/web3.js");
-    const nacl = await import("tweetnacl");
-    const bs58 = await import("bs58");
-
-    // Decode keypair
-    let keypair: InstanceType<typeof Keypair>;
-    try {
-      keypair = Keypair.fromSecretKey(bs58.default.decode(this.solanaPrivateKey));
-    } catch {
-      throw new Error("Invalid Solana private key. Must be base58-encoded.");
-    }
+    const { wallet, sign } = await this.loadKeypair();
 
     // Verify wallet matches
-    const walletFromKey = keypair.publicKey.toBase58();
-    if (walletFromKey !== payload.creatorWallet) {
+    if (wallet !== payload.creatorWallet) {
       throw new Error(
-        `Wallet mismatch: private key is for ${walletFromKey}, but payload claims ${payload.creatorWallet}`
+        `Wallet mismatch: private key is for ${wallet}, but payload claims ${payload.creatorWallet}`
       );
     }
 
@@ -314,7 +198,7 @@ export class SkillIndexClient {
     const timestamp = String(Date.now());
     const message = `Foundry:publish:${payload.service}:${timestamp}`;
     const messageBytes = new TextEncoder().encode(message);
-    const signatureBytes = nacl.default.sign.detached(messageBytes, keypair.secretKey);
+    const signatureBytes = sign(messageBytes);
     const signature = Buffer.from(signatureBytes).toString("base64");
 
     // Include signature and timestamp in payload
