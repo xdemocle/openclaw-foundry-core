@@ -19,8 +19,6 @@ foundry_extend_self      — Add capability to Foundry itself
 foundry_list             — List written artifacts
 foundry_restart          — Restart gateway with resume
 foundry_learnings        — View patterns/insights
-foundry_publish_ability  — Publish to Foundry Marketplace
-foundry_marketplace      — Search, leaderboard, install abilities
 foundry_meta_search      — ADAS: LLM designs + scores novel agents (needs LLM key)
 foundry_self_write       — Write a tool/hook/technique to the self-written store
 ```
@@ -87,8 +85,6 @@ Helper modules in **`src/`** are **lazy-loaded at call time** via `await import(
 
 | File | Role |
 |------|------|
-| `src/skill-index.ts` | `SkillIndexClient` — marketplace HTTP client (search/summary/free download); `safeFetch` error normalization |
-| `src/brain-index.ts` | `BrainIndexClient extends SkillIndexClient` — ability search/leaderboard/download |
 | `src/meta-agent-search.ts` | `MetaAgentSearch` + `ArchiveManager` — ADAS agent-design search; wired via `foundry_meta_search` |
 | `src/self-writer.ts` | `SelfWriter` + code/hook/tool `TEMPLATES` — wired via `foundry_self_write` |
 | `src/llm-client.ts` | `AnthropicLLMClient` (fetch-based, no SDK) + `LLMTaskEvaluator` — LLM access for ADAS; config via `llmApiKey`/`ANTHROPIC_API_KEY` |
@@ -208,24 +204,6 @@ Flagged patterns (warning):
 - `fs.readFile`, `fs.writeFile` — Filesystem access
 
 ## Integration
-
-### Foundry Marketplace
-```typescript
-// Publish pattern
-foundry_publish_ability type="pattern" name="..." patternId="pat_123"
-
-// Search community patterns
-foundry_marketplace action="search" query="rate limit" type="pattern"
-
-// See leaderboard (ranked by unique payers)
-foundry_marketplace action="leaderboard"
-
-// Install ability (x402 USDC payment)
-foundry_marketplace action="install" id="abc123"
-```
-
-### Marketplace Server
-Located in `foundry/server/` — Bun HTTP server with x402 Solana payments.
 
 ### Restart Resume
 ```typescript

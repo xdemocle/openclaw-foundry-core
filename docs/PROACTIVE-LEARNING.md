@@ -177,31 +177,6 @@ ${gaps.map(g => `- ${g.description} (seen ${g.count} times)`).join('\n')}
 });
 ```
 
-## Crowdsourced Learning
-
-Foundry can learn from the community via Brain Marketplace:
-
-### Publishing Patterns
-When a pattern helps 5+ times:
-```
-Foundry: "This pattern has helped you 5 times:
-  'Rate limited' → 'Add 1s delay between requests'
-
-Publish to Brain Marketplace? (free, helps others)"
-```
-
-### Downloading Patterns
-Before encountering common errors:
-```
-Foundry (proactively):
-"I found 3 community patterns for the API you're using:
-1. 'Auth header format' (47 users helped)
-2. 'Pagination handling' (31 users helped)
-3. 'Rate limit workaround' (28 users helped)
-
-Install these patterns?"
-```
-
 ## Configuration
 
 ```json
@@ -215,9 +190,7 @@ Install these patterns?"
         "suggestFixes": true,
         "autoFix": false,
         "autoFixThreshold": 5,
-        "detectCapabilityGaps": true,
-        "crowdsourcedPatterns": true,
-        "autoPublishThreshold": 5
+        "detectCapabilityGaps": true
       }
     }
   }
@@ -227,7 +200,5 @@ Install these patterns?"
 ## Privacy
 
 - All learning is local by default
-- Publishing to Brain Marketplace is opt-in
-- Patterns are anonymized before publishing
 - No sensitive data (API keys, passwords) is ever recorded
 - User can clear learnings at any time: `rm ~/.openclaw/foundry/learnings.json`

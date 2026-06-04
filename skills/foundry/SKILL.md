@@ -41,26 +41,17 @@ Add to `~/.openclaw/openclaw.json`:
 
 ## Configuration
 
-Full configuration options in `~/.openclaw/openclaw.json`:
+Configuration options in `~/.openclaw/openclaw.json` (all optional — Foundry runs with zero config):
 
 ```json
 {
   "plugins": {
     "entries": {
-      "foundry": {
+      "foundry-openclaw": {
         "enabled": true,
         "source": "github:lekt9/openclaw-foundry",
         "config": {
-          "autoLearn": true,
-          "sources": {
-            "docs": true,
-            "experience": true,
-            "arxiv": true,
-            "github": true
-          },
-          "marketplace": {
-            "autoPublish": false
-          }
+          "dataDir": "~/.openclaw/foundry"
         }
       }
     }
@@ -72,12 +63,11 @@ Full configuration options in `~/.openclaw/openclaw.json`:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `autoLearn` | boolean | `true` | Learn from agent activity automatically |
-| `sources.docs` | boolean | `true` | Learn from OpenClaw documentation |
-| `sources.experience` | boolean | `true` | Learn from own successes/failures |
-| `sources.arxiv` | boolean | `true` | Learn from arXiv papers |
-| `sources.github` | boolean | `true` | Learn from GitHub repos |
-| `marketplace.autoPublish` | boolean | `false` | Auto-publish high-value patterns |
+| `dataDir` | string | `~/.openclaw/foundry` | Where learnings, workflows, and the ADAS archive are stored |
+| `openclawPath` | string | *(unset)* | Local OpenClaw checkout for offline doc loading |
+| `llmApiKey` | string | *(unset)* | API key for LLM features (prefer the `ANTHROPIC_API_KEY` env var) |
+| `llmBaseUrl` | string | `https://api.anthropic.com` | Anthropic-compatible LLM endpoint |
+| `llmModel` | string | `claude-3-5-sonnet-latest` | Model id for LLM features |
 
 ## What Foundry Does
 
@@ -117,13 +107,6 @@ Foundry is an AI-powered development agent that can:
 | `foundry_extend_self` | Add new capability to Foundry itself |
 | `foundry_learnings` | View learned patterns and insights |
 | `foundry_list` | List all written artifacts |
-
-### Marketplace
-
-| Tool | Description |
-|------|-------------|
-| `foundry_publish_ability` | Publish pattern/skill to Foundry Marketplace |
-| `foundry_marketplace` | Search, browse, and install community abilities |
 
 ## Usage Examples
 
@@ -186,4 +169,3 @@ Foundry validates all generated code before deployment:
 ## Links
 
 - [GitHub](https://github.com/lekt9/openclaw-foundry)
-- [Foundry Marketplace](https://api.claw.getfoundry.app)

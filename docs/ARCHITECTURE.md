@@ -293,21 +293,6 @@ api.on("after_tool_call", async (event) => { ... });
 api.on("agent_end", async (event) => { ... });
 ```
 
-### Brain Marketplace
-```typescript
-// Publish pattern
-POST /skills/publish
-{
-  "abilityType": "pattern",
-  "service": "Pattern Name",
-  "content": { errorPattern, resolution, ... },
-  "creatorWallet": "..."
-}
-
-// Search patterns
-GET /skills/search?q=rate+limit&type=pattern
-```
-
 ### Gateway Restart
 ```typescript
 // Save context before restart

@@ -6,11 +6,7 @@
 
 **The forge that forges itself.**
 
-[![FDRY](https://img.shields.io/badge/FDRY-Solana-9945FF)](https://dexscreener.com/solana/2jc1lpgy1zjl9uertfdmtnm4kc2ahhydk4tqqqgbjdhh)
-
 Foundry is a self-writing meta-extension for [OpenClaw](https://github.com/lekt9/openclaw) that learns how you work, researches documentation, and writes new capabilities into itself. It observes your workflows, crystallizes patterns into tools, and upgrades itself to match how you operate.
-
-**$FDRY** — [dexscreener](https://dexscreener.com/solana/2jc1lpgy1zjl9uertfdmtnm4kc2ahhydk4tqqqgbjdhh) · Solana
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -39,7 +35,6 @@ Foundry is a self-writing meta-extension for [OpenClaw](https://github.com/lekt9
 - Researches docs → writes new extensions/skills/hooks
 - Has its own learning engine (not part of OpenClaw core)
 - Can modify itself via `foundry_extend_self`
-- Publishes to Foundry Marketplace via x402
 
 ```
 OpenClaw (platform)
@@ -52,8 +47,7 @@ OpenClaw (platform)
         ├── researches → docs, papers, repos
         ├── writes → extensions, skills, hooks
         ├── learns → from outcomes
-        ├── crystallizes → patterns into tools
-        └── publishes → to marketplace
+        └── crystallizes → patterns into tools
 ```
 
 **Key distinction:** OpenClaw doesn't have built-in self-learning. Foundry adds that capability on top. Foundry is an "agent that builds agents" — it uses OpenClaw's infrastructure to create new OpenClaw capabilities, and upgrades itself to match how you work.
@@ -170,7 +164,6 @@ This is **recursive self-improvement** — each capability makes acquiring the n
 ### Proactive Learning
 - Records tool outcomes (success/failure) with context
 - Builds patterns from repeated workflows
-- Shares learnings via the Foundry Marketplace
 - Injects relevant context into agent conversations
 
 ### Sandbox Validation
@@ -236,7 +229,6 @@ All keys live under `plugins.entries.foundry-openclaw.config`:
 |-----|---------|--------------|
 | `dataDir` | `~/.openclaw/foundry` | Where learnings, workflows, and the ADAS archive are stored |
 | `openclawPath` | *(unset)* | Path to a local OpenClaw checkout for offline doc loading; skipped when unset |
-| `skillIndexUrl` | `https://api.claw.getfoundry.app` | Foundry Marketplace API base URL |
 | `llmApiKey` | *(unset)* | API key for LLM-backed features (`foundry_meta_search`) — prefer the env var |
 | `llmBaseUrl` | `https://api.anthropic.com` | Anthropic-compatible `/v1/messages` endpoint |
 | `llmModel` | `claude-3-5-sonnet-latest` | Model id for LLM-backed features |
@@ -247,8 +239,7 @@ Minimal example:
 { "plugins": { "entries": { "foundry-openclaw": {
   "enabled": true,
   "config": {
-    "dataDir": "~/.openclaw/foundry",
-    "skillIndexUrl": "https://api.claw.getfoundry.app"
+    "dataDir": "~/.openclaw/foundry"
   }
 }}}}
 ```
@@ -331,8 +322,6 @@ Then, in a session, confirm the tools respond:
 |------|-------------|
 | `foundry_list` | List all written extensions and skills |
 | `foundry_restart` | Restart gateway with context preservation |
-| `foundry_publish_ability` | Publish patterns/extensions to Foundry Marketplace |
-| `foundry_marketplace` | Search, browse leaderboard, and install abilities |
 
 ### Autonomous / LLM-backed
 
@@ -481,47 +470,6 @@ Generated code is validated before deployment:
 6. If passes → deploy to real extensions directory
 ```
 
-## Foundry Marketplace
-
-Search, publish, and download abilities from the Foundry Marketplace.
-
-> **This build:** marketplace **search / leaderboard / free download** and **(unsigned) publish** work out of the box. **Paid x402 on-chain downloads are disabled** — the Solana signing/payment path was removed, so only free abilities can be installed. The x402 flow described below is the full-protocol design.
-
-```bash
-# Publish a workflow pattern you discovered
-foundry_publish_ability type="pattern" name="Deploy Staging" patternId="wp_123"
-
-# Search for existing patterns
-foundry_marketplace action="search" query="deploy" type="pattern"
-
-# See the leaderboard
-foundry_marketplace action="leaderboard"
-
-# Download and apply
-foundry_marketplace action="install" id="abc123"
-```
-
-### x402 Protocol
-
-HTTP 402 "Payment Required" + Solana USDC:
-
-1. Request a skill download
-2. Server returns 402 with payment requirements
-3. Sign USDC transaction with your wallet
-4. Retry with signed transaction in header
-5. Receive the skill
-
-No intermediaries. Direct creator payment. Network effects compound.
-
-### Ability Types & Pricing
-
-| Type | Price | Description |
-|------|-------|-------------|
-| Pattern | FREE | Workflow patterns (crowdsourced) |
-| Technique | $0.02 | Reusable code snippets |
-| Extension | $0.05 | Full OpenClaw plugins |
-| Agent | $0.10 | High-fitness agent designs |
-
 ## Configuration
 
 All options live under `plugins.entries.foundry-openclaw.config` — see the [Setup Guide](#setup-guide) for walkthroughs. The full schema:
@@ -532,7 +480,6 @@ All options live under `plugins.entries.foundry-openclaw.config` — see the [Se
   "config": {
     "dataDir": "~/.openclaw/foundry",
     "openclawPath": "/path/to/openclaw",
-    "skillIndexUrl": "https://api.claw.getfoundry.app",
     "llmBaseUrl": "https://api.anthropic.com",
     "llmModel": "claude-3-5-sonnet-latest"
   }
@@ -543,7 +490,6 @@ All options live under `plugins.entries.foundry-openclaw.config` — see the [Se
 |--------|-------------|---------|
 | `dataDir` | Directory to store forged artifacts | `~/.openclaw/foundry` |
 | `openclawPath` | Local OpenClaw checkout for offline doc loading | *(unset — remote docs used)* |
-| `skillIndexUrl` | Foundry Marketplace API base URL | `https://api.claw.getfoundry.app` |
 | `llmApiKey` | API key for LLM features (prefer the `ANTHROPIC_API_KEY` env var) | *(unset)* |
 | `llmBaseUrl` | Anthropic-compatible LLM endpoint | `https://api.anthropic.com` |
 | `llmModel` | Model id for LLM features | `claude-3-5-sonnet-latest` |
