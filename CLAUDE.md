@@ -21,7 +21,13 @@ foundry_restart          — Restart gateway with resume
 foundry_learnings        — View patterns/insights
 foundry_publish_ability  — Publish to Foundry Marketplace
 foundry_marketplace      — Search, leaderboard, install abilities
+foundry_meta_search      — ADAS: LLM designs + scores novel agents (needs LLM key)
+foundry_self_write       — Write a tool/hook/technique to the self-written store
 ```
+
+> **LLM-backed features** (`foundry_meta_search`) need an API key: set `ANTHROPIC_API_KEY`
+> (or `foundry` config `llmApiKey`). Base URL/model default to Anthropic; override with
+> `llmBaseUrl`/`llmModel` (any Anthropic-compatible `/v1/messages` endpoint works).
 
 ### Key Directories
 ```
@@ -83,8 +89,9 @@ Helper modules in **`src/`** are **lazy-loaded at call time** via `await import(
 |------|------|
 | `src/skill-index.ts` | `SkillIndexClient` — marketplace HTTP client (search/summary/free download); `safeFetch` error normalization |
 | `src/brain-index.ts` | `BrainIndexClient extends SkillIndexClient` — ability search/leaderboard/download |
-| `src/meta-agent-search.ts` | `MetaAgentSearch` + `ArchiveManager` — evolutionary agent-design search |
-| `src/self-writer.ts` | `SelfWriter` + code/hook/tool `TEMPLATES` |
+| `src/meta-agent-search.ts` | `MetaAgentSearch` + `ArchiveManager` — ADAS agent-design search; wired via `foundry_meta_search` |
+| `src/self-writer.ts` | `SelfWriter` + code/hook/tool `TEMPLATES` — wired via `foundry_self_write` |
+| `src/llm-client.ts` | `AnthropicLLMClient` (fetch-based, no SDK) + `LLMTaskEvaluator` — LLM access for ADAS; config via `llmApiKey`/`ANTHROPIC_API_KEY` |
 
 `types/clawdbot-plugin-sdk.d.ts` provides a **fallback ambient declaration** for the optional
 `clawdbot/plugin-sdk` peer dep (the real types ship with the host install; this lets Foundry

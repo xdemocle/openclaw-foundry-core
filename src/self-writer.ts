@@ -32,6 +32,36 @@ export interface SelfWriterConfig {
 
 // ── Self Writer ──────────────────────────────────────────────────────────────
 
+// ── Safe interpolation helpers ───────────────────────────────────────────────
+
+/** Quote a value as a JS/JSON string literal (escapes quotes, backslashes, newlines). */
+function jsString(v: string): string {
+  return JSON.stringify(String(v ?? ""));
+}
+
+/** Collapse a value to a single safe source-comment line. */
+function commentSafe(v: string): string {
+  return String(v ?? "")
+    .replace(/\r?\n/g, " ")
+    .replace(/\*\//g, "*\\/");
+}
+
+/** Sanitize a value into a valid JS identifier. */
+function identSafe(v: string): string {
+  const cleaned = String(v ?? "").replace(/[^A-Za-z0-9_$]/g, "_");
+  return /^[A-Za-z_$]/.test(cleaned) ? cleaned : `_${cleaned || "fn"}`;
+}
+
+/** Sanitize a name for safe use in a filename. */
+function slugify(v: string): string {
+  return (
+    String(v ?? "")
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "unnamed"
+  );
+}
+
 export class SelfWriter {
   private writtenDir: string;
   private manifest: WrittenCode[] = [];
@@ -68,7 +98,7 @@ export class SelfWriter {
    * Write a new piece of code into the system.
    */
   write(entry: Omit<WrittenCode, "id" | "createdAt">): WrittenCode {
-    const id = `${entry.type}-${entry.name}-${Date.now()}`;
+    const id = `${entry.type}-${slugify(entry.name)}-${Date.now()}`;
     const full: WrittenCode = {
       ...entry,
       id,
@@ -94,12 +124,12 @@ export class SelfWriter {
   writeTool(name: string, description: string, code: string, source: string): WrittenCode {
     // Wrap code in tool format if needed
     const toolCode = code.includes("inputSchema") ? code : `
-// Auto-generated tool: ${name}
-// Source: ${source}
+// Auto-generated tool: ${commentSafe(name)}
+// Source: ${commentSafe(source)}
 
 export const tool = {
-  name: "${name}",
-  description: "${description.replace(/"/g, '\\"')}",
+  name: ${jsString(name)},
+  description: ${jsString(description)},
   inputSchema: {
     type: "object",
     properties: {},
@@ -133,12 +163,12 @@ export default tool;
     source: string,
   ): WrittenCode {
     const hookCode = `
-// Auto-generated hook: ${name}
-// Event: ${event}
-// Source: ${source}
+// Auto-generated hook: ${commentSafe(name)}
+// Event: ${commentSafe(event)}
+// Source: ${commentSafe(source)}
 
-export const hookEvent = "${event}";
-export const hookName = "${name}";
+export const hookEvent = ${jsString(event)};
+export const hookName = ${jsString(name)};
 
 export async function handler(event, ctx) {
 ${handlerCode.split("\n").map(l => "  " + l).join("\n")}
@@ -161,13 +191,13 @@ export default { event: hookEvent, name: hookName, handler };
    */
   writeTechnique(name: string, description: string, code: string, source: string): WrittenCode {
     const techniqueCode = `
-// Auto-generated technique: ${name}
-// Source: ${source}
-// Description: ${description}
+// Auto-generated technique: ${commentSafe(name)}
+// Source: ${commentSafe(source)}
+// Description: ${commentSafe(description)}
 
 ${code}
 
-export default { name: "${name}", description: "${description.replace(/"/g, '\\"')}" };
+export default { name: ${jsString(name)}, description: ${jsString(description)} };
 `;
 
     return this.write({
@@ -269,8 +299,8 @@ export default { name: "${name}", description: "${description.replace(/"/g, '\\"
 export const TEMPLATES = {
   tool: (name: string, description: string, logic: string) => `
 export const tool = {
-  name: "${name}",
-  description: "${description}",
+  name: ${jsString(name)},
+  description: ${jsString(description)},
   inputSchema: {
     type: "object",
     properties: {},
@@ -284,8 +314,8 @@ export const tool = {
 
   hook: (name: string, event: string, logic: string) => `
 export const hook = {
-  event: "${event}",
-  name: "${name}",
+  event: ${jsString(event)},
+  name: ${jsString(name)},
   async handler(event, ctx) {
     ${logic}
   }
@@ -293,7 +323,7 @@ export const hook = {
 `,
 
   technique: (name: string, logic: string) => `
-export function ${name}(input) {
+export function ${identSafe(name)}(input) {
   ${logic}
 }
 `,

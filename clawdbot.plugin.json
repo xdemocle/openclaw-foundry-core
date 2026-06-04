@@ -21,6 +21,20 @@
         "type": "string",
         "description": "Foundry marketplace API base URL",
         "default": "https://api.claw.getfoundry.app"
+      },
+      "llmApiKey": {
+        "type": "string",
+        "description": "API key for LLM-backed features (ADAS / meta search). Prefer the ANTHROPIC_API_KEY env var over storing it here."
+      },
+      "llmBaseUrl": {
+        "type": "string",
+        "description": "Anthropic-compatible LLM API base URL",
+        "default": "https://api.anthropic.com"
+      },
+      "llmModel": {
+        "type": "string",
+        "description": "Model id for LLM-backed features",
+        "default": "claude-3-5-sonnet-latest"
       }
     }
   },
@@ -36,6 +50,9 @@
     "skillIndexUrl": {
       "label": "Marketplace URL",
       "placeholder": "https://api.claw.getfoundry.app"
-    }
+    },
+    "llmApiKey": { "label": "LLM API Key", "sensitive": true },
+    "llmBaseUrl": { "label": "LLM Base URL", "placeholder": "https://api.anthropic.com" },
+    "llmModel": { "label": "LLM Model", "placeholder": "claude-3-5-sonnet-latest" }
   }
 }

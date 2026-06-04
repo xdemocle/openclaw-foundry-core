@@ -12,7 +12,7 @@
  * 5. Use archive to inform next generation
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -212,6 +212,8 @@ Provide your final agent design.`;
 export class ArchiveManager {
   private archive: AgentDesign[] = [];
   private archivePath: string;
+  private seq = 0;
+  private static readonly MAX_ARCHIVE = 100;
 
   constructor(dataDir: string) {
     this.archivePath = join(dataDir, "archive.json");
@@ -246,19 +248,35 @@ export class ArchiveManager {
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
-    writeFileSync(this.archivePath, JSON.stringify({ agents: this.archive }, null, 2));
+    // Atomic write: temp file then rename, so a crash can't truncate archive.json.
+    const tmp = `${this.archivePath}.tmp`;
+    writeFileSync(tmp, JSON.stringify({ agents: this.archive }, null, 2));
+    renameSync(tmp, this.archivePath);
   }
 
   add(agent: Omit<AgentDesign, "id" | "createdAt" | "enabled">): AgentDesign {
     const full: AgentDesign = {
       ...agent,
-      id: `gen-${agent.generation}-${Date.now()}`,
+      // Counter suffix guarantees uniqueness even within the same millisecond.
+      id: `gen-${agent.generation}-${Date.now()}-${this.seq++}`,
       createdAt: new Date().toISOString(),
       enabled: true,
     };
     this.archive.push(full);
+    this.pruneArchive();
     this.save();
     return full;
+  }
+
+  // Bound archive growth: keep enabled agents and the highest-fitness designs.
+  private pruneArchive(): void {
+    if (this.archive.length <= ArchiveManager.MAX_ARCHIVE) return;
+    this.archive.sort(
+      (a, b) =>
+        Number(b.enabled) - Number(a.enabled) ||
+        b.fitness.accuracy - a.fitness.accuracy,
+    );
+    this.archive = this.archive.slice(0, ArchiveManager.MAX_ARCHIVE);
   }
 
   getAll(): AgentDesign[] {
@@ -409,11 +427,15 @@ export class MetaAgentSearch {
       const agent = await this.runGeneration();
       if (!agent) continue;
 
-      // Evaluate on tasks
-      const result = await this.evaluateAgent(agent.id, tasks);
+      // Evaluate repeatedly to build a confidence interval (ADAS eval budget).
+      let result: EvaluationResult | null = null;
+      const evals = Math.max(1, this.config.evaluationsPerAgent);
+      for (let e = 0; e < evals; e++) {
+        result = await this.evaluateAgent(agent.id, tasks);
+      }
 
       // Only keep if above threshold
-      if (result.accuracy >= this.config.minFitnessThreshold) {
+      if (result && result.accuracy >= this.config.minFitnessThreshold) {
         discovered.push(agent);
         onProgress?.(i, agent);
       }

@@ -5624,6 +5624,221 @@ ${p.hookCode}
             return { content: [{ type: "text", text: output }] };
           },
         },
+
+        // ── foundry_meta_search ──────────────────────────────────────────────
+        {
+          name: "foundry_meta_search",
+          label: "Meta Agent Search (ADAS)",
+          description:
+            "Run Automated Design of Agentic Systems (ADAS): an LLM proposes novel agent " +
+            "designs, scores them against tasks, and keeps the best in an archive. " +
+            "Requires an LLM API key (ANTHROPIC_API_KEY or foundry config `llmApiKey`).",
+          parameters: {
+            type: "object" as const,
+            properties: {
+              tasks: {
+                type: "array" as const,
+                items: { type: "string" as const },
+                description:
+                  "Task descriptions to evaluate candidate agents against",
+              },
+              generations: {
+                type: "number" as const,
+                description:
+                  "How many new agent designs to generate (default 3, max 10)",
+              },
+              status: {
+                type: "boolean" as const,
+                description:
+                  "If true, just report the current archive status without running a search",
+              },
+            },
+            required: [],
+          },
+          async execute(_toolCallId: string, params: unknown) {
+            const p = params as {
+              tasks?: string[];
+              generations?: number;
+              status?: boolean;
+            };
+
+            const { MetaAgentSearch } = await import(
+              "./src/meta-agent-search.js"
+            );
+            const { AnthropicLLMClient, LLMTaskEvaluator, resolveLLMConfig } =
+              await import("./src/llm-client.js");
+
+            // Status-only path doesn't need the LLM.
+            if (p.status) {
+              const search = new MetaAgentSearch(
+                dataDir,
+                {
+                  complete: async () => "",
+                  completeJson: async () => ({}) as any,
+                },
+                {
+                  evaluate: async () => ({
+                    success: false,
+                    accuracy: 0,
+                    errors: [],
+                    duration: 0,
+                  }),
+                },
+                undefined,
+                logger,
+              );
+              return {
+                content: [{ type: "text", text: search.getStatus() }],
+              };
+            }
+
+            let llm;
+            try {
+              llm = new AnthropicLLMClient(resolveLLMConfig(cfg as any));
+            } catch (err: any) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Cannot run meta search: ${err?.message || err}`,
+                  },
+                ],
+              };
+            }
+
+            const generations = Math.max(1, Math.min(10, p.generations ?? 3));
+            const search = new MetaAgentSearch(
+              dataDir,
+              llm,
+              new LLMTaskEvaluator(llm),
+              {
+                maxGenerations: generations,
+                evaluationsPerAgent: 1,
+                reflexionSteps: 2,
+                minFitnessThreshold: 0.3,
+              },
+              logger,
+            );
+
+            const tasks =
+              p.tasks && p.tasks.length
+                ? p.tasks
+                : ["Solve a general reasoning task."];
+            try {
+              const discovered = await search.runSearch(tasks);
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: [
+                      `## Meta Agent Search complete`,
+                      ``,
+                      `Generated ${generations} design(s); ${discovered.length} passed the fitness threshold.`,
+                      ``,
+                      search.getStatus(),
+                    ].join("\n"),
+                  },
+                ],
+              };
+            } catch (err: any) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Meta search failed: ${err?.message || err}`,
+                  },
+                ],
+              };
+            }
+          },
+        },
+
+        // ── foundry_self_write ───────────────────────────────────────────────
+        {
+          name: "foundry_self_write",
+          label: "Self-Write Code",
+          description:
+            "Write a tool, hook, or technique into Foundry's self-written code store " +
+            "(persisted under the data dir). For full, sandbox-validated extensions use " +
+            "foundry_write_extension; this is a lighter-weight scratchpad.",
+          parameters: {
+            type: "object" as const,
+            properties: {
+              kind: {
+                type: "string" as const,
+                enum: ["tool", "hook", "technique"],
+                description: "What to write",
+              },
+              name: { type: "string" as const, description: "Name" },
+              description: {
+                type: "string" as const,
+                description: "What it does",
+              },
+              code: {
+                type: "string" as const,
+                description: "Body / logic",
+              },
+              event: {
+                type: "string" as const,
+                description: "Hook event (for kind=hook)",
+              },
+              source: {
+                type: "string" as const,
+                description: "Where this came from (research, failure, request)",
+              },
+            },
+            required: ["kind", "name", "code"],
+          },
+          async execute(_toolCallId: string, params: unknown) {
+            const p = params as {
+              kind: "tool" | "hook" | "technique";
+              name: string;
+              description?: string;
+              code: string;
+              event?: string;
+              source?: string;
+            };
+
+            const { SelfWriter } = await import("./src/self-writer.js");
+            const selfWriter = new SelfWriter({ dataDir, logger });
+
+            const source = p.source || "foundry_self_write";
+            const description = p.description || "";
+            let written;
+            if (p.kind === "hook") {
+              written = selfWriter.writeHook(
+                p.name,
+                p.event || "before_tool_call",
+                description,
+                p.code,
+                source,
+              );
+            } else if (p.kind === "technique") {
+              written = selfWriter.writeTechnique(
+                p.name,
+                description,
+                p.code,
+                source,
+              );
+            } else {
+              written = selfWriter.writeTool(
+                p.name,
+                description,
+                p.code,
+                source,
+              );
+            }
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Wrote ${p.kind} **${p.name}** (id: \`${written.id}\`) to the self-written store under \`${join(dataDir, "written")}\`.`,
+                },
+              ],
+            };
+          },
+        },
       ];
 
       return toolList;
@@ -5654,6 +5869,9 @@ ${p.hookCode}
       "foundry_get_insights",
       "foundry_pending_feedback",
       "foundry_apply_improvement",
+      // LLM-backed (ADAS + self-writer)
+      "foundry_meta_search",
+      "foundry_self_write",
     ];
 
     api.registerTool(tools, { names: toolNames });
