@@ -184,104 +184,123 @@ This is **recursive self-improvement** — each capability makes acquiring the n
 - Automatically resumes after restart via managed hook
 - No lost work when self-modifying
 
-## Installation
+## Setup Guide
+
+Get Foundry running on OpenClaw — written for both humans and coding agents. There's a [TL;DR for agents](#tldr-for-coding-agents) at the end.
+
+### Prerequisites
+
+- A working **OpenClaw** install with a runnable `openclaw` CLI — check with `openclaw gateway status`.
+- **Node.js 18+** on `PATH`. Foundry uses the global `fetch`/`AbortSignal.timeout`, and its code sandbox shells out to `npx tsx` to validate generated extensions.
+- No build step is needed to *use* Foundry — the gateway loads its TypeScript (`index.ts`) directly. A build is only needed when publishing to npm (`npm run build` → `dist/`).
+
+### 1. Install
+
+**Recommended — via OpenClaw:**
 
 ```bash
 openclaw plugins install @getfoundry/foundry-openclaw
 ```
 
-That's it. This will download, extract, enable, and load Foundry automatically.
+Downloads, enables, and loads Foundry automatically. Then restart the gateway (below).
 
----
+**From GitHub source** — add to `~/.openclaw/openclaw.json` (a build runs automatically on source installs via the `prepare` script):
 
-### Alternative: Manual Config
-
-Add to `~/.openclaw/openclaw.json`:
 ```json
-{
-  "plugins": {
-    "entries": {
-      "foundry": { "enabled": true }
-    }
-  }
-}
+{ "plugins": { "entries": { "foundry-openclaw": {
+  "enabled": true,
+  "source": "github:lekt9/openclaw-foundry"
+}}}}
 ```
 
-Then restart:
+**Manual clone:**
+
+```bash
+git clone https://github.com/lekt9/openclaw-foundry ~/.openclaw/extensions/foundry-openclaw
+cd ~/.openclaw/extensions/foundry-openclaw && npm install   # installs devDeps + builds dist/
+```
+
+Apply any of the above with a restart:
+
 ```bash
 openclaw gateway restart
 ```
 
-### Option C: GitHub Source
+> ⚠️ The plugin id is **`foundry-openclaw`**. Use that exact key in `openclaw.json` and as the install directory name (not `foundry`).
 
-Add to `~/.openclaw/openclaw.json`:
+### 2. Configure (optional — Foundry runs with zero config)
+
+All keys live under `plugins.entries.foundry-openclaw.config`:
+
+| Key | Default | What it does |
+|-----|---------|--------------|
+| `dataDir` | `~/.openclaw/foundry` | Where learnings, workflows, and the ADAS archive are stored |
+| `openclawPath` | *(unset)* | Path to a local OpenClaw checkout for offline doc loading; skipped when unset |
+| `skillIndexUrl` | `https://api.claw.getfoundry.app` | Foundry Marketplace API base URL |
+| `llmApiKey` | *(unset)* | API key for LLM-backed features (`foundry_meta_search`) — prefer the env var |
+| `llmBaseUrl` | `https://api.anthropic.com` | Anthropic-compatible `/v1/messages` endpoint |
+| `llmModel` | `claude-3-5-sonnet-latest` | Model id for LLM-backed features |
+
+Minimal example:
 
 ```json
-{
-  "plugins": {
-    "entries": {
-      "foundry": {
-        "enabled": true,
-        "source": "github:lekt9/openclaw-foundry"
-      }
-    }
+{ "plugins": { "entries": { "foundry-openclaw": {
+  "enabled": true,
+  "config": {
+    "dataDir": "~/.openclaw/foundry",
+    "skillIndexUrl": "https://api.claw.getfoundry.app"
   }
-}
+}}}}
 ```
 
-### Option D: Nix (Reproducible)
+### 3. (Optional) Enable LLM-backed ADAS — `foundry_meta_search`
+
+The Meta Agent Search tool calls an LLM to design and score candidate agents. **Every other feature works without this** — only `foundry_meta_search` (non-status mode) is gated on a key.
+
+Resolution order (config wins over env): `llmApiKey` → `ANTHROPIC_API_KEY` → `FOUNDRY_LLM_API_KEY`.
+
+**Anthropic (default):**
 
 ```bash
-nix run github:lekt9/openclaw-foundry
+export ANTHROPIC_API_KEY="sk-ant-..."
 ```
 
-### Option E: Manual Clone
+**Any Anthropic-compatible endpoint (e.g. MiniMax)** — you must also set the base URL **and** the model (the default `claude-*` id won't exist on other providers):
 
 ```bash
-git clone https://github.com/lekt9/openclaw-foundry ~/.openclaw/extensions/foundry
-cd ~/.openclaw/extensions/foundry && npm install
+export ANTHROPIC_BASE_URL="https://api.minimax.io/anthropic"   # client appends /v1/messages
+export ANTHROPIC_API_KEY="<your-key>"
+export FOUNDRY_LLM_MODEL="<provider-model-id>"
 ```
 
-Then restart:
+| Setting | Env var | Config key |
+|---------|---------|-----------|
+| Base URL | `ANTHROPIC_BASE_URL` | `llmBaseUrl` |
+| API key | `ANTHROPIC_API_KEY` (or `FOUNDRY_LLM_API_KEY`) | `llmApiKey` |
+| Model | `FOUNDRY_LLM_MODEL` | `llmModel` |
+
+The client speaks the Anthropic Messages wire format (`x-api-key` + `anthropic-version` headers, `{system, messages, max_tokens}` body), so any endpoint that mirrors that will work.
+
+### 4. Verify
+
 ```bash
 openclaw gateway restart
+tail -f ~/.openclaw/logs/gateway.log | grep foundry     # expect a foundry registration line, no errors
 ```
 
-### Configuration
+Then, in a session, confirm the tools respond:
 
-Full config options:
+- `foundry_list` → lists written extensions/skills (empty on a fresh install).
+- `foundry_research query="hooks"` → fetches docs from `docs.openclaw.ai`.
+- `foundry_meta_search status=true` → reports the ADAS archive **without needing an API key**.
 
-```json
-{
-  "plugins": {
-    "entries": {
-      "foundry": {
-        "enabled": true,
-        "source": "github:lekt9/openclaw-foundry",
-        "config": {
-          "autoLearn": true,
-          "sources": {
-            "docs": true,
-            "experience": true,
-            "arxiv": true,
-            "github": true
-          },
-          "marketplace": {
-            "autoPublish": false
-          }
-        }
-      }
-    }
-  }
-}
-```
+### TL;DR for coding agents
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `autoLearn` | `true` | Learn from agent activity automatically |
-| `sources.docs` | `true` | Learn from OpenClaw documentation |
-| `sources.experience` | `true` | Learn from own successes/failures |
-| `marketplace.autoPublish` | `false` | Auto-publish high-value patterns |
+1. Confirm OpenClaw is up: `openclaw gateway status`.
+2. Install: `openclaw plugins install @getfoundry/foundry-openclaw` (or add a `foundry-openclaw` entry to `~/.openclaw/openclaw.json`).
+3. `openclaw gateway restart`, then verify: `grep foundry ~/.openclaw/logs/gateway.log`.
+4. Leave config empty unless asked — defaults are sane.
+5. Only set the LLM key if the user wants `foundry_meta_search`, and prefer the `ANTHROPIC_API_KEY` **env var** over writing secrets into `openclaw.json`.
 
 ## Tools
 
@@ -314,6 +333,13 @@ Full config options:
 | `foundry_restart` | Restart gateway with context preservation |
 | `foundry_publish_ability` | Publish patterns/extensions to Foundry Marketplace |
 | `foundry_marketplace` | Search, browse leaderboard, and install abilities |
+
+### Autonomous / LLM-backed
+
+| Tool | Description |
+|------|-------------|
+| `foundry_meta_search` | ADAS: an LLM designs and scores novel agent architectures (needs an LLM key; `status=true` needs none) |
+| `foundry_self_write` | Write a tool/hook/technique into the self-written code store |
 
 ## Bundled Skills
 
@@ -457,7 +483,9 @@ Generated code is validated before deployment:
 
 ## Foundry Marketplace
 
-Publish and download abilities with x402 Solana USDC payments:
+Search, publish, and download abilities from the Foundry Marketplace.
+
+> **This build:** marketplace **search / leaderboard / free download** and **(unsigned) publish** work out of the box. **Paid x402 on-chain downloads are disabled** — the Solana signing/payment path was removed, so only free abilities can be installed. The x402 flow described below is the full-protocol design.
 
 ```bash
 # Publish a workflow pattern you discovered
@@ -496,46 +524,29 @@ No intermediaries. Direct creator payment. Network effects compound.
 
 ## Configuration
 
-```json
-{
-  "plugins": {
-    "entries": {
-      "foundry": {
-        "enabled": true,
-        "config": {
-          "dataDir": "~/.openclaw/foundry",
-          "openclawPath": "/path/to/openclaw",
-          "autoLearn": true,
-          "sources": {
-            "docs": true,
-            "experience": true,
-            "arxiv": false,
-            "github": false
-          },
-          "marketplace": {
-            "url": "https://api.claw.getfoundry.app",
-            "autoPublish": false
-          }
-        }
-      }
-    }
-  }
-}
-```
+All options live under `plugins.entries.foundry-openclaw.config` — see the [Setup Guide](#setup-guide) for walkthroughs. The full schema:
 
-### Config Options
+```json
+{ "plugins": { "entries": { "foundry-openclaw": {
+  "enabled": true,
+  "config": {
+    "dataDir": "~/.openclaw/foundry",
+    "openclawPath": "/path/to/openclaw",
+    "skillIndexUrl": "https://api.claw.getfoundry.app",
+    "llmBaseUrl": "https://api.anthropic.com",
+    "llmModel": "claude-3-5-sonnet-latest"
+  }
+}}}}
+```
 
 | Option | Description | Default |
 |--------|-------------|---------|
 | `dataDir` | Directory to store forged artifacts | `~/.openclaw/foundry` |
-| `openclawPath` | Path to OpenClaw installation for local docs | - |
-| `autoLearn` | Automatically learn from agent activity | `true` |
-| `sources.docs` | Learn from OpenClaw documentation | `true` |
-| `sources.experience` | Learn from own successes/failures | `true` |
-| `sources.arxiv` | Learn from arXiv papers | `true` |
-| `sources.github` | Learn from GitHub repos | `true` |
-| `marketplace.url` | Foundry marketplace URL | `https://api.claw.getfoundry.app` |
-| `marketplace.autoPublish` | Auto-publish high-value patterns | `false` |
+| `openclawPath` | Local OpenClaw checkout for offline doc loading | *(unset — remote docs used)* |
+| `skillIndexUrl` | Foundry Marketplace API base URL | `https://api.claw.getfoundry.app` |
+| `llmApiKey` | API key for LLM features (prefer the `ANTHROPIC_API_KEY` env var) | *(unset)* |
+| `llmBaseUrl` | Anthropic-compatible LLM endpoint | `https://api.anthropic.com` |
+| `llmModel` | Model id for LLM features | `claude-3-5-sonnet-latest` |
 
 ## Research Foundations
 
@@ -583,10 +594,11 @@ Foundry operationalizes this: the system that writes the code IS the code being 
 ## Development
 
 ```bash
-# Type check
-npx tsc --noEmit
+npx tsc --noEmit        # type check (reads tsconfig.json)
+npm run build           # compile to dist/ (JS + d.ts + sourcemaps)
+npm run clean           # rm -rf dist
 
-# Test extension locally
+# Test live — the gateway loads index.ts directly, so no build is needed:
 openclaw gateway restart
 tail -f ~/.openclaw/logs/gateway.log | grep foundry
 ```
