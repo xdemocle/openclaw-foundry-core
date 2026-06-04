@@ -15,7 +15,8 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "downlevelIteration": true,
-    "incremental": true
+    "incremental": true,
+    "tsBuildInfoFile": "./.tsbuildinfo"
   },
   "include": ["index.ts", "src/**/*.ts", "types/**/*.d.ts"],
   "exclude": ["node_modules", "dist"]
