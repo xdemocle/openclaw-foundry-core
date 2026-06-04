@@ -81,8 +81,8 @@ Helper modules in **`src/`** are **lazy-loaded at call time** via `await import(
 
 | File | Role |
 |------|------|
-| `src/skill-index.ts` | `SkillIndexClient` — marketplace HTTP client, Solana-signed publish/download |
-| `src/brain-index.ts` | `BrainIndexClient extends SkillIndexClient` — ability search/leaderboard/publish |
+| `src/skill-index.ts` | `SkillIndexClient` — marketplace HTTP client (search/summary/free download); `safeFetch` error normalization |
+| `src/brain-index.ts` | `BrainIndexClient extends SkillIndexClient` — ability search/leaderboard/download |
 | `src/meta-agent-search.ts` | `MetaAgentSearch` + `ArchiveManager` — evolutionary agent-design search |
 | `src/self-writer.ts` | `SelfWriter` + code/hook/tool `TEMPLATES` |
 
@@ -102,7 +102,7 @@ Three near-identical manifests exist for the rebranding lineage — keep them in
 User Request
      │
      ▼
-Research (docs.molt.bot)
+Research (docs.openclaw.ai)
      │
      ▼
 Generate Code (templates)
@@ -120,7 +120,7 @@ Restart Gateway (with resume)
 ## Key Classes
 
 ### DocsFetcher
-Fetches docs.molt.bot with 30-minute cache:
+Fetches docs.openclaw.ai with 30-minute cache:
 ```
 Available topics: plugin, hooks, tools, browser, skills, agent, gateway, channels, memory, automation
 ```

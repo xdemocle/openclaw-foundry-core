@@ -33,7 +33,7 @@ Foundry is a self-writing meta-extension that can research, learn, and generate 
 
 ### 1. DocsFetcher
 
-Fetches and caches documentation from docs.molt.bot.
+Fetches and caches documentation from docs.openclaw.ai.
 
 ```typescript
 class DocsFetcher {
@@ -63,8 +63,8 @@ Generates and manages extensions, skills, tools, and hooks.
 ```typescript
 class CodeWriter {
   private manifest: { extensions: ExtensionDef[]; skills: SkillDef[] };
-  private extensionsDir: string;  // ~/.clawdbot/extensions
-  private skillsDir: string;       // ~/.clawdbot/skills
+  private extensionsDir: string;  // ~/.openclaw/extensions
+  private skillsDir: string;       // ~/.openclaw/skills
 
   async writeExtension(def: ExtensionDef, validator?: CodeValidator): Promise<{ path: string; validation: ValidationResult }>;
   writeSkill(def: SkillDef): string;
@@ -159,7 +159,7 @@ class CodeValidator {
    │
    ▼
 2. foundry_research (optional)
-   │  Fetch relevant docs from docs.molt.bot
+   │  Fetch relevant docs from docs.openclaw.ai
    │
    ▼
 3. foundry_write_extension
@@ -178,9 +178,9 @@ class CodeValidator {
    │   ├─ Try to load extension
    │   └─ Return success/error
    │
-   ├─► Write to ~/.clawdbot/extensions/{id}/
+   ├─► Write to ~/.openclaw/extensions/{id}/
    │   ├─ index.ts
-   │   └─ clawdbot.plugin.json
+   │   └─ openclaw.plugin.json
    │
    └─► foundry_restart (optional)
        └─ Restart gateway with resume context
@@ -214,7 +214,7 @@ class CodeValidator {
 ## File Structure
 
 ```
-~/.clawdbot/
+~/.openclaw/
 ├── foundry/                     # Foundry data directory
 │   ├── manifest.json            # Registry of written artifacts
 │   │   {
@@ -238,7 +238,7 @@ class CodeValidator {
 ├── extensions/                  # Generated extensions
 │   └── {extension-id}/
 │       ├── index.ts             # Extension code
-│       └── clawdbot.plugin.json # Plugin manifest
+│       └── openclaw.plugin.json # Plugin manifest
 │
 ├── skills/                      # Generated skills
 │   └── {skill-name}/

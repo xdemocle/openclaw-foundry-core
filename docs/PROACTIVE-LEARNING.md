@@ -230,4 +230,4 @@ Install these patterns?"
 - Publishing to Brain Marketplace is opt-in
 - Patterns are anonymized before publishing
 - No sensitive data (API keys, passwords) is ever recorded
-- User can clear learnings at any time: `rm ~/.clawdbot/foundry/learnings.json`
+- User can clear learnings at any time: `rm ~/.openclaw/foundry/learnings.json`

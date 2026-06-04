@@ -6,10 +6,10 @@
  * - Skills (SKILL.md + api.ts)
  * - The extension itself
  *
- * Grounded in docs.molt.bot/llms.txt — fetches documentation on demand.
+ * Grounded in docs.openclaw.ai/llms.txt — fetches documentation on demand.
  *
  * Tools:
- *   foundry_research     — Search docs.molt.bot for best practices
+ *   foundry_research     — Search docs.openclaw.ai for best practices
  *   foundry_implement    — Research + implement a capability
  *   foundry_write_extension — Write a new OpenClaw extension
  *   foundry_write_skill  — Write a skill package
@@ -95,29 +95,34 @@ class DocsFetcher {
   private cache: Map<string, { content: string; fetchedAt: number }> =
     new Map();
   private cacheTtl = 1000 * 60 * 30; // 30 minutes
-  private openclawIndex: string | null = null;
 
   /**
    * Fetch the OpenClaw llms.txt index for discovering available documentation pages.
    * This should be called first to understand what docs are available.
+   * Honors the same 30-minute TTL cache as page fetches (stale-while-error).
    */
   async fetchOpenClawIndex(): Promise<string> {
-    if (this.openclawIndex) return this.openclawIndex;
+    const cached = this.cache.get(OPENCLAW_LLMS_TXT);
+    if (cached && Date.now() - cached.fetchedAt < this.cacheTtl) {
+      return cached.content;
+    }
 
     try {
-      const res = await fetch(OPENCLAW_LLMS_TXT);
+      const res = await fetch(OPENCLAW_LLMS_TXT, {
+        signal: AbortSignal.timeout(15_000),
+      });
       if (res.ok) {
-        this.openclawIndex = await res.text();
-        this.cache.set(OPENCLAW_LLMS_TXT, {
-          content: this.openclawIndex,
-          fetchedAt: Date.now(),
-        });
-        return this.openclawIndex;
+        const content = await res.text();
+        this.cache.set(OPENCLAW_LLMS_TXT, { content, fetchedAt: Date.now() });
+        return content;
       }
     } catch (err) {
-      // Fallback silently
+      // Fall back to the last good copy if we have one.
     }
-    return "OpenClaw llms.txt not available. Using fallback documentation.";
+    return (
+      cached?.content ??
+      "OpenClaw llms.txt not available. Using fallback documentation."
+    );
   }
 
   /**
@@ -150,12 +155,14 @@ class DocsFetcher {
     }
 
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
       if (!res.ok) {
-        // If OpenClaw fails, try molt.bot as fallback
+        // If OpenClaw fails, try the fallback docs host
         if (baseUrl === OPENCLAW_DOCS_BASE) {
           const fallbackUrl = `${DOCS_BASE}${path}`;
-          const fallbackRes = await fetch(fallbackUrl);
+          const fallbackRes = await fetch(fallbackUrl, {
+            signal: AbortSignal.timeout(15_000),
+          });
           if (fallbackRes.ok) {
             const html = await fallbackRes.text();
             const content = this.extractContent(html);
@@ -292,8 +299,11 @@ class DocsFetcher {
       .replace(/<h4[^>]*>(.*?)<\/h4>/gi, "#### $1\n")
       .replace(/<p[^>]*>(.*?)<\/p>/gi, "$1\n\n")
       .replace(/<li[^>]*>(.*?)<\/li>/gi, "- $1\n")
-      .replace(/<code[^>]*>(.*?)<\/code>/gi, "`$1`")
-      .replace(/<pre[^>]*>(.*?)<\/pre>/gis, "```\n$1\n```\n")
+      .replace(
+        /<pre[^>]*>\s*(?:<code[^>]*>)?([\s\S]*?)(?:<\/code>)?\s*<\/pre>/gi,
+        "```\n$1\n```\n",
+      )
+      .replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, "`$1`")
       .replace(/<a[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi, "[$2]($1)")
       .replace(/<strong[^>]*>(.*?)<\/strong>/gi, "**$1**")
       .replace(/<em[^>]*>(.*?)<\/em>/gi, "*$1*")
@@ -1892,7 +1902,8 @@ ${escapedResolution}
   getRecentFailures(limit = 5): LearningEntry[] {
     return this.learnings
       .filter((l) => l.type === "failure" && !l.resolution)
-      .slice(-limit);
+      .slice(-limit)
+      .reverse(); // most-recent first
   }
 
   getPatterns(): LearningEntry[] {
@@ -2698,7 +2709,9 @@ class CodeValidator {
   }
 
   /**
-   * Static security scan - same patterns as unbrowse's skill-review.
+   * Static security scan (advisory only). This is a regex blocklist for
+   * obviously-dangerous APIs and can be bypassed by obfuscation; the real
+   * safety boundary is the isolated sandbox in testInSandbox().
    */
   private staticSecurityScan(code: string): {
     blocked: string[];
@@ -4230,10 +4243,9 @@ ${p.toolCode
                 {
                   type: "text",
                   text:
-                    `## Gateway Restart Scheduled\n\n` +
+                    `## Gateway Restart Requested\n\n` +
                     `**Reason**: ${p.reason}\n\n` +
-                    `Session context saved. The conversation will automatically resume after restart.\n\n` +
-                    `Restarting in 500ms...`,
+                    `Session context saved. Attempting to restart the gateway now; if it does not come back automatically, restart it manually with \`openclaw gateway restart\`.`,
                 },
               ],
             };
@@ -5269,8 +5281,7 @@ ${p.hookCode}
                     `**ID**: \`${outcomeId}\`\n` +
                     `**Description**: ${p.taskDescription}\n` +
                     `**Params**: ${JSON.stringify(p.taskParams, null, 2)}\n\n` +
-                    `Use \`foundry_record_feedback\` with this ID once you have engagement metrics, ` +
-                    `or the system will automatically attempt to collect feedback after 1 hour.`,
+                    `Use \`foundry_record_feedback\` with this ID once you have engagement metrics.`,
                 },
               ],
             };
@@ -5651,6 +5662,7 @@ ${p.hookCode}
     // Check for pending session (resume after restart) and inject learnings
     // Start workflow tracking and inject proactive suggestions
     api.on("before_agent_start", async (event: any, ctx: any) => {
+      try {
       const extensions = writer.getExtensions();
       const skills = writer.getSkills();
       const pendingSession = learningEngine.getPendingSession();
@@ -5833,12 +5845,12 @@ Use \`foundry_track_outcome\` after executing tasks to continue learning.
         prependContext: `${resumeContext}${workflowContext}${evolutionContext}${outcomeInsights}${learningsContext}
 ## Foundry: Self-Writing Coding Subagent
 
-Grounded in **docs.molt.bot** — fetches documentation on demand. Can modify its own source code.
+Grounded in **docs.openclaw.ai** — fetches documentation on demand. Can modify its own source code.
 
 **Written**: ${extensions.length} extensions, ${skills.length} skills | **Learnings**: ${learningEngine.getLearningsSummary()} | **Workflows**: ${workflowStats.totalWorkflows} recorded, ${workflowStats.patterns} patterns
 
 **Tools**:
-- \`foundry_research\` — Search docs.molt.bot for best practices
+- \`foundry_research\` — Search docs.openclaw.ai for best practices
 - \`foundry_implement\` — Research + implement a capability (fetches docs)
 - \`foundry_write_extension\` — Create an OpenClaw extension
 - \`foundry_write_skill\` — Create a skill package
@@ -5862,6 +5874,10 @@ When you need a new capability:
 **Workflow Learning**: I observe your tool sequences and suggest automation after repeated patterns.
 `,
       };
+      } catch (err) {
+        logger.warn?.(`[foundry] before_agent_start failed: ${err}`);
+        return {};
+      }
     });
 
     // ── after_tool_call Hook ─────────────────────────────────────────────────
@@ -6035,7 +6051,7 @@ ${escapedResolution}
 
     const features = [
       `${toolNames.length} tools`,
-      "docs.molt.bot grounded",
+      "docs.openclaw.ai grounded",
       "self-modification",
       "proactive learning",
       "restart resume",
