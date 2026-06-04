@@ -47,6 +47,10 @@ web_modules/
 # TypeScript cache
 *.tsbuildinfo
 
+# Editor swap files
+*.swp
+*.swo
+
 # Optional npm cache directory
 .npm
 

@@ -10,7 +10,7 @@
  * No archive, no fitness scores. Just write and use.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlinkSync } from "node:fs";
 import { join, basename } from "node:path";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -218,7 +218,7 @@ export default { name: "${name}", description: "${description.replace(/"/g, '\\"
     // Delete file (if exists)
     const codePath = join(this.writtenDir, `${id}.ts`);
     if (existsSync(codePath)) {
-      require("fs").unlinkSync(codePath);
+      unlinkSync(codePath);
     }
 
     return true;

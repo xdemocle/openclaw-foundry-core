@@ -29,9 +29,13 @@ import {
   readFileSync,
   writeFileSync,
   readdirSync,
+  unlinkSync,
+  rmSync,
 } from "node:fs";
+import { spawn, exec } from "node:child_process";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 
 // ── Documentation URLs ───────────────────────────────────────────────────────
 
@@ -777,6 +781,7 @@ class CodeWriter {
   }
 
   private loadOpenClawDocs(): void {
+    if (!this.openclawPath) return;
     const pluginDocPath = join(this.openclawPath, "docs", "plugin.md");
     const hooksDocPath = join(this.openclawPath, "docs", "hooks.md");
 
@@ -913,19 +918,31 @@ class CodeWriter {
     return { path: extDir, validation };
   }
 
-  addTool(extensionId: string, tool: ToolDef): boolean {
+  // Adds a tool to an existing extension and re-validates the whole extension
+  // (static scan + sandbox) before persisting. Throws if validation fails;
+  // returns false only when the extension id is unknown. The stored manifest is
+  // not mutated unless writeExtension succeeds.
+  async addTool(
+    extensionId: string,
+    tool: ToolDef,
+    validator?: CodeValidator,
+  ): Promise<boolean> {
     const ext = this.manifest.extensions.find((e) => e.id === extensionId);
     if (!ext) return false;
-    ext.tools.push(tool);
-    this.writeExtension(ext);
+    const candidate = { ...ext, tools: [...ext.tools, tool] };
+    await this.writeExtension(candidate, validator);
     return true;
   }
 
-  addHook(extensionId: string, hook: HookDef): boolean {
+  async addHook(
+    extensionId: string,
+    hook: HookDef,
+    validator?: CodeValidator,
+  ): Promise<boolean> {
     const ext = this.manifest.extensions.find((e) => e.id === extensionId);
     if (!ext) return false;
-    ext.hooks.push(hook);
-    this.writeExtension(ext);
+    const candidate = { ...ext, hooks: [...ext.hooks, hook] };
+    await this.writeExtension(candidate, validator);
     return true;
   }
 
@@ -1829,8 +1846,7 @@ ${escapedResolution}
   clearPendingSession(): void {
     this.pendingSession = null;
     if (existsSync(this.pendingSessionPath)) {
-      const fs = require("node:fs");
-      fs.unlinkSync(this.pendingSessionPath);
+      unlinkSync(this.pendingSessionPath);
     }
     this.logger?.info(`[foundry] Cleared pending session`);
   }
@@ -2664,21 +2680,18 @@ class CodeValidator {
     code: string,
     tempDir: string,
   ): Promise<{ success: boolean; error?: string }> {
-    const { spawn } = require("node:child_process");
-    const fs = require("node:fs");
-
-    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+    if (!existsSync(tempDir)) mkdirSync(tempDir, { recursive: true });
 
     const testId = `sandbox_${Date.now()}`;
     const testDir = join(tempDir, testId);
-    fs.mkdirSync(testDir, { recursive: true });
+    mkdirSync(testDir, { recursive: true });
 
     const indexFile = join(testDir, "index.ts");
     const runnerFile = join(testDir, "runner.mjs");
 
     try {
       // Write extension code
-      fs.writeFileSync(indexFile, code);
+      writeFileSync(indexFile, code);
 
       // Write a runner that loads and tests the extension
       const runnerCode = `
@@ -2729,7 +2742,7 @@ try {
   process.exit(1);
 }
 `;
-      fs.writeFileSync(runnerFile, runnerCode);
+      writeFileSync(runnerFile, runnerCode);
 
       // Run with tsx (TypeScript executor)
       return new Promise((resolve) => {
@@ -2741,6 +2754,18 @@ try {
 
         let stdout = "";
         let stderr = "";
+        let settled = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+
+        const finish = (result: { success: boolean; error?: string }) => {
+          if (settled) return;
+          settled = true;
+          if (timer) clearTimeout(timer);
+          try {
+            rmSync(testDir, { recursive: true, force: true });
+          } catch {}
+          resolve(result);
+        };
 
         proc.stdout?.on("data", (data: Buffer) => {
           stdout += data.toString();
@@ -2750,38 +2775,30 @@ try {
         });
 
         proc.on("close", (code: number) => {
-          // Clean up
-          try {
-            fs.rmSync(testDir, { recursive: true, force: true });
-          } catch {}
-
           if (code === 0 && stdout.includes("SANDBOX_OK")) {
-            resolve({ success: true });
+            finish({ success: true });
           } else {
             const errorMatch = stderr.match(/SANDBOX_ERROR:\s*(.+)/);
             const error =
               errorMatch?.[1] || stderr.slice(0, 500) || `Exit code ${code}`;
-            resolve({ success: false, error });
+            finish({ success: false, error });
           }
         });
 
         proc.on("error", (err: Error) => {
-          try {
-            fs.rmSync(testDir, { recursive: true, force: true });
-          } catch {}
-          resolve({ success: false, error: err.message });
+          finish({ success: false, error: err.message });
         });
 
-        // Timeout fallback
-        setTimeout(() => {
-          proc.kill();
-          resolve({ success: false, error: "Sandbox timeout (15s)" });
+        // Timeout fallback — kill the process tree and clean up
+        timer = setTimeout(() => {
+          proc.kill("SIGKILL");
+          finish({ success: false, error: "Sandbox timeout (15s)" });
         }, 15000);
       });
     } catch (err: any) {
       // Clean up on error
       try {
-        fs.rmSync(testDir, { recursive: true, force: true });
+        rmSync(testDir, { recursive: true, force: true });
       } catch {}
       return { success: false, error: err.message };
     }
@@ -2821,8 +2838,7 @@ export default {
     const cfg = api.pluginConfig || {};
     const dataDir =
       (cfg as any).dataDir || join(homedir(), ".openclaw", "foundry");
-    const openclawPath =
-      (cfg as any).openclawPath || "/Users/lekt9/Projects/aiko/openclaw";
+    const openclawPath = (cfg as any).openclawPath || "";
 
     if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
 
@@ -3608,14 +3624,30 @@ export default {
           async execute(_toolCallId: string, params: unknown) {
             const p = params as any;
 
-            const success = writer.addTool(p.extensionId, {
-              name: p.name,
-              label: p.label,
-              description: p.description,
-              properties: p.properties || {},
-              required: p.required || [],
-              code: p.code,
-            });
+            let success: boolean;
+            try {
+              success = await writer.addTool(
+                p.extensionId,
+                {
+                  name: p.name,
+                  label: p.label,
+                  description: p.description,
+                  properties: p.properties || {},
+                  required: p.required || [],
+                  code: p.code,
+                },
+                codeValidator,
+              );
+            } catch (err: any) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Tool **${p.name}** rejected by validation: ${err?.message || err}`,
+                  },
+                ],
+              };
+            }
 
             if (!success) {
               return {
@@ -3671,10 +3703,26 @@ export default {
           async execute(_toolCallId: string, params: unknown) {
             const p = params as any;
 
-            const success = writer.addHook(p.extensionId, {
-              event: p.event,
-              code: p.code,
-            });
+            let success: boolean;
+            try {
+              success = await writer.addHook(
+                p.extensionId,
+                {
+                  event: p.event,
+                  code: p.code,
+                },
+                codeValidator,
+              );
+            } catch (err: any) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Hook **${p.event}** rejected by validation: ${err?.message || err}`,
+                  },
+                ],
+              };
+            }
 
             if (!success) {
               return {
@@ -3861,28 +3909,22 @@ export default {
           },
           async execute(_toolCallId: string, params: unknown) {
             const p = params as any;
-            const selfPath = join(__dirname, "index.ts");
+            const moduleDir = fileURLToPath(new URL(".", import.meta.url));
+            // When running from source the entry is index.ts; from dist it's index.js.
+            const tsPath = join(moduleDir, "index.ts");
+            const jsPath = join(moduleDir, "index.js");
+            const actualPath = existsSync(tsPath) ? tsPath : jsPath;
 
-            // Check if we can find ourselves
-            if (!existsSync(selfPath)) {
-              // Try alternate path
-              const altPath =
-                "/Users/lekt9/Projects/aiko/extensions/foundry/index.ts";
-              if (!existsSync(altPath)) {
-                return {
-                  content: [
-                    {
-                      type: "text",
-                      text: `Cannot find self at ${selfPath} or ${altPath}`,
-                    },
-                  ],
-                };
-              }
+            if (!existsSync(actualPath)) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Cannot find self at ${tsPath} or ${jsPath}`,
+                  },
+                ],
+              };
             }
-
-            const actualPath = existsSync(selfPath)
-              ? selfPath
-              : "/Users/lekt9/Projects/aiko/extensions/foundry/index.ts";
 
             if (p.action === "read_self") {
               const content = readFileSync(actualPath, "utf-8");
@@ -4071,8 +4113,6 @@ ${p.toolCode
               resumeContext: string;
               lastMessage?: string;
             };
-            const { exec } = require("node:child_process");
-
             // Save pending session for resume
             learningEngine.savePendingSession({
               agentId: "current", // Will be replaced with actual ID if available
@@ -4166,8 +4206,7 @@ ${p.toolCode
           label: "Publish to Brain Marketplace",
           description:
             "Publish a pattern, extension, technique, insight, or agent design to the brain marketplace. " +
-            "Patterns are free to share (crowdsourced learning), other abilities earn USDC. " +
-            "Requires a creator wallet (set up via unbrowse_wallet).",
+            "Publishing is unsigned/anonymous in this build.",
           parameters: {
             type: "object" as const,
             properties: {
@@ -4205,34 +4244,9 @@ ${p.toolCode
               patternId?: string;
             };
 
-            // Get creator wallet from config
-            const configPath = join(homedir(), ".openclaw", "openclaw.json");
-            let creatorWallet: string | null = null;
-            try {
-              const config = JSON.parse(readFileSync(configPath, "utf-8"));
-              creatorWallet =
-                config?.plugins?.entries?.unbrowse?.config?.creatorWallet;
-            } catch {}
-
-            if (!creatorWallet) {
-              return {
-                content: [
-                  {
-                    type: "text",
-                    text: "No creator wallet configured. Use unbrowse_wallet to set up a wallet first.",
-                  },
-                ],
-              };
-            }
-
-            // Get skill index URL from config
-            let skillIndexUrl = "https://api.claw.getfoundry.app";
-            try {
-              const config = JSON.parse(readFileSync(configPath, "utf-8"));
-              skillIndexUrl =
-                config?.plugins?.entries?.unbrowse?.config?.skillIndexUrl ??
-                skillIndexUrl;
-            } catch {}
+            // Marketplace URL comes from Foundry's own plugin config.
+            const skillIndexUrl =
+              (cfg as any).skillIndexUrl || "https://api.claw.getfoundry.app";
 
             let content = p.content;
 
@@ -4275,7 +4289,7 @@ ${p.toolCode
                   abilityType: p.type,
                   service: p.name,
                   content,
-                  creatorWallet,
+                  creatorWallet: "",
                   baseUrl: "",
                   authMethodType: "none",
                   endpoints: [],
@@ -4385,26 +4399,14 @@ ${p.toolCode
               limit?: number;
             };
 
-            // Get config for marketplace
-            const configPath = join(homedir(), ".openclaw", "openclaw.json");
-
-            // Resolve marketplace URL and signing key from config
-            let skillIndexUrl = "https://api.claw.getfoundry.app";
-            let solanaPrivateKey: string | undefined;
-            try {
-              const config = JSON.parse(readFileSync(configPath, "utf-8"));
-              const unbrowseConfig =
-                config?.plugins?.entries?.unbrowse?.config;
-              skillIndexUrl =
-                unbrowseConfig?.skillIndexUrl ?? skillIndexUrl;
-              solanaPrivateKey = unbrowseConfig?.solanaPrivateKey;
-            } catch {}
+            // Marketplace URL comes from Foundry's own plugin config.
+            const skillIndexUrl =
+              (cfg as any).skillIndexUrl || "https://api.claw.getfoundry.app";
 
             // Lazy-load brain client
             const { BrainIndexClient } = await import("./src/brain-index.js");
             const brainClient = new BrainIndexClient({
               indexUrl: skillIndexUrl,
-              solanaPrivateKey,
             });
 
             try {

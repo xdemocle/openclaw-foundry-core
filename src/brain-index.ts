@@ -73,14 +73,6 @@ export interface AgentContent {
   metadata?: Record<string, any>;
 }
 
-export interface PublishAbilityPayload {
-  type: AbilityType;
-  service: string; // Name/title
-  content: PatternContent | ExtensionContent | TechniqueContent | InsightContent | AgentContent | any;
-  creatorWallet: string;
-  priceCents?: number; // Override default pricing
-}
-
 export interface LeaderboardEntry {
   id: string;
   service: string;
@@ -114,14 +106,14 @@ export class BrainIndexClient extends SkillIndexClient {
     query: string,
     opts?: { type?: AbilityType; tags?: string; limit?: number; offset?: number },
   ): Promise<SearchAbilityResult> {
-    const url = new URL(`${this["indexUrl"]}/skills/search`);
+    const url = new URL(`${this.indexUrl}/skills/search`);
     url.searchParams.set("q", query);
     if (opts?.type) url.searchParams.set("type", opts.type);
     if (opts?.tags) url.searchParams.set("tags", opts.tags);
     if (opts?.limit) url.searchParams.set("limit", String(opts.limit));
     if (opts?.offset) url.searchParams.set("offset", String(opts.offset));
 
-    const resp = await fetch(url.toString(), {
+    const resp = await this.safeFetch(url.toString(), {
       signal: AbortSignal.timeout(10_000),
     });
 
@@ -137,11 +129,11 @@ export class BrainIndexClient extends SkillIndexClient {
    * Get the leaderboard — top abilities ranked by unique payers.
    */
   async getLeaderboard(opts?: { type?: AbilityType; limit?: number }): Promise<LeaderboardResult> {
-    const url = new URL(`${this["indexUrl"]}/abilities/leaderboard`);
+    const url = new URL(`${this.indexUrl}/abilities/leaderboard`);
     if (opts?.type) url.searchParams.set("type", opts.type);
     if (opts?.limit) url.searchParams.set("limit", String(opts.limit));
 
-    const resp = await fetch(url.toString(), {
+    const resp = await this.safeFetch(url.toString(), {
       signal: AbortSignal.timeout(10_000),
     });
 
@@ -154,59 +146,8 @@ export class BrainIndexClient extends SkillIndexClient {
   }
 
   /**
-   * Publish an ability (pattern, extension, technique, insight, or agent).
-   * Requires signing the message with the creator's private key to prove wallet ownership.
-   */
-  async publishAbility(payload: PublishAbilityPayload): Promise<{ id: string; slug: string; version: number; reviewStatus: string }> {
-    const { wallet, sign } = await this.loadKeypair();
-
-    // Verify wallet matches
-    if (wallet !== payload.creatorWallet) {
-      throw new Error(
-        `Wallet mismatch: private key is for ${wallet}, but payload claims ${payload.creatorWallet}`
-      );
-    }
-
-    // Sign message: "Foundry:publish:<service>:<timestamp>"
-    const timestamp = String(Date.now());
-    const message = `Foundry:publish:${payload.service}:${timestamp}`;
-    const messageBytes = new TextEncoder().encode(message);
-    const signatureBytes = sign(messageBytes);
-    const signature = Buffer.from(signatureBytes).toString("base64");
-
-    const body = {
-      abilityType: payload.type,
-      service: payload.service,
-      content: payload.content,
-      creatorWallet: payload.creatorWallet,
-      priceCents: payload.priceCents,
-      signature,
-      timestamp,
-      // Stub fields for compatibility with existing schema
-      baseUrl: "",
-      authMethodType: "none",
-      endpoints: [],
-      skillMd: "",
-      apiTemplate: "",
-    };
-
-    const resp = await fetch(`${this["indexUrl"]}/skills/publish`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(30_000),
-    });
-
-    if (!resp.ok) {
-      const text = await resp.text().catch(() => "");
-      throw new Error(`Publish failed (${resp.status}): ${text}`);
-    }
-
-    return resp.json() as any;
-  }
-
-  /**
-   * Download an ability by ID (x402 payment required for non-free abilities).
+   * Download an ability by ID. Free abilities only (paid x402 downloads are
+   * disabled in this build — see SkillIndexClient.download).
    */
   async downloadAbility(id: string): Promise<AbilityPackage | SkillPackage> {
     // Uses the parent download method — server returns the right format
