@@ -1,9 +1,9 @@
 ---
 name: foundry
 description: Self-writing meta-extension that forges new capabilities — researches docs, writes extensions, tools, hooks, and skills
-homepage: https://github.com/xdemocle/openclaw-foundry
+homepage: https://github.com/xdemocle/openclaw-foundry-core
 user-invocable: true
-metadata: {"openclaw":{"requires":{"bins":["node"]},"repository":"github:xdemocle/openclaw-foundry"}}
+metadata: {"openclaw":{"requires":{"bins":["node"]},"repository":"github:xdemocle/openclaw-foundry-core"}}
 ---
 
 # Foundry
@@ -49,7 +49,7 @@ Configuration options in `~/.openclaw/openclaw.json` (all optional — Foundry r
     "entries": {
       "openclaw-foundry-core": {
         "enabled": true,
-        "source": "github:xdemocle/openclaw-foundry",
+        "source": "github:xdemocle/openclaw-foundry-core",
         "config": {
           "dataDir": "~/.openclaw/foundry"
         }
@@ -168,4 +168,4 @@ Foundry validates all generated code before deployment:
 
 ## Links
 
-- [GitHub](https://github.com/xdemocle/openclaw-foundry)
+- [GitHub](https://github.com/xdemocle/openclaw-foundry-core)

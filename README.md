@@ -204,14 +204,14 @@ Downloads, enables, and loads Foundry automatically. Then restart the gateway (b
 ```json
 { "plugins": { "entries": { "openclaw-foundry-core": {
   "enabled": true,
-  "source": "github:xdemocle/openclaw-foundry"
+  "source": "github:xdemocle/openclaw-foundry-core"
 }}}}
 ```
 
 **Manual clone:**
 
 ```bash
-git clone https://github.com/xdemocle/openclaw-foundry ~/.openclaw/extensions/openclaw-foundry-core
+git clone https://github.com/xdemocle/openclaw-foundry-core ~/.openclaw/extensions/openclaw-foundry-core
 cd ~/.openclaw/extensions/openclaw-foundry-core && npm install   # installs devDeps + builds dist/
 ```
 
