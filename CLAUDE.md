@@ -23,6 +23,12 @@ foundry_meta_search      — ADAS: LLM designs + scores novel agents (needs LLM 
 foundry_self_write       — Write a tool/hook/technique to the self-written store
 ```
 
+> The list above is the curated set. The extension actually registers **25** `foundry_*`
+> tools (grep `name: "foundry_` in index.ts). The rest are the Learning/Overseer surface:
+> `foundry_overseer`, `foundry_crystallize`, `foundry_save_hook`, `foundry_metrics`,
+> `foundry_evolve`, `foundry_track_outcome`, `foundry_record_feedback`,
+> `foundry_get_insights`, `foundry_pending_feedback`, `foundry_apply_improvement`.
+
 > **LLM-backed features** (`foundry_meta_search`) need an API key: set `ANTHROPIC_API_KEY`
 > (or `foundry` config `llmApiKey`). Base URL/model default to Anthropic; override with
 > `llmBaseUrl`/`llmModel` (any Anthropic-compatible `/v1/messages` endpoint works).
@@ -78,7 +84,7 @@ these classes (line numbers drift — grep for `class <Name>`):
 | `CodeWriter` (index.ts) | Generates extensions/skills/hooks from templates, writes to `~/.openclaw/...` |
 | `LearningEngine` (index.ts) | Records failures/resolutions → patterns; runs the hourly Overseer |
 | `CodeValidator` (index.ts) | Static security scan + isolated-process sandbox validation |
-| `register(api)` (index.ts) | Plugin entry: defines all `foundry_*` tools and `api.on(...)` hooks |
+| `register(api)` (index.ts, ~line 5380) | Plugin entry: `api.registerTool(tools, {names})` for all `foundry_*` tools, plus two real hooks — `api.on("before_tool_call")` (learning capture) and `api.on("before_agent_start")` (context injection). The `command:new`/`gateway:startup` events elsewhere in these docs are for *generated* hooks, not Foundry's own. |
 
 Helper modules in **`src/`** are **lazy-loaded at call time** via `await import("./src/<name>.js")`
 (note the `.js` specifier even though sources are `.ts`):
@@ -98,6 +104,14 @@ and is normally **not** in `node_modules` here.
 Three near-identical manifests exist for the rebranding lineage — keep them in sync:
 `openclaw.plugin.json`, `clawdbot.plugin.json`, and the `moltbot`/`openclaw`/`clawdbot` keys in
 `package.json`. All point the entry at `./index.ts`.
+
+> ⚠️ **Version drift is real and intentional-ish:** `package.json` is the npm version
+> (currently `1.2.0`), while `*.plugin.json` carry their own `version` (`0.2.3`). They are
+> *not* auto-synced — bump the one you mean. The publishing examples below show `0.2.0`;
+> ignore that literal and use the current npm version.
+
+Background docs live in `docs/`: `docs/ARCHITECTURE.md` (system overview) and
+`docs/PROACTIVE-LEARNING.md` (the Learning/Overseer design).
 
 ## Architecture
 
