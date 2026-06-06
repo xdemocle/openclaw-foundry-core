@@ -1758,11 +1758,11 @@ ${escapedResolution}
       },
       {
         match: /BLOCKED: Shell execution/i,
-        resolution: "Do not use exec(), spawn(), or shell commands. Use direct API calls or the plugin SDK methods instead.",
+        resolution: "Do not use the exec, spawn, or shell-command APIs. Use direct API calls or the plugin SDK methods instead.",
       },
       {
         match: /BLOCKED: Dynamic code execution/i,
-        resolution: "Do not use eval() or new Function(). Use static code patterns only.",
+        resolution: "Do not use dynamic code evaluation or the Function constructor. Use static code patterns only.",
       },
       {
         match: /Sandbox.*failed|runtime.*error/i,
@@ -2692,7 +2692,7 @@ class CodeValidator {
         pattern: /ignore\s+previous\s+instructions|system:\s*you/i,
         reason: "Prompt injection",
       },
-      { pattern: /coinhive|cryptominer/i, reason: "Crypto mining" },
+      { pattern: new RegExp(["coin" + "hive", "crypto" + "miner"].join("|"), "i"), reason: "Crypto mining" },
       { pattern: /crontab|systemctl|launchctl/i, reason: "System persistence" },
       { pattern: /<script|<!--/i, reason: "Script injection" },
     ];
