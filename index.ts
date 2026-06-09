@@ -5564,6 +5564,31 @@ Use \`foundry_track_outcome\` after executing tasks to continue learning.
 
       const workflowStats = learningEngine.getWorkflowStats();
 
+      // Only advertise/inject the Foundry surface into sessions that actually have
+      // the foundry_* tools in scope. The before_agent_start event does not reliably
+      // carry agent identity across gateway versions, so detect defensively from any
+      // tool list the host exposes; if none is present we cannot tell and fall back
+      // to injecting (no regression for agents — e.g. main — that hold the tools).
+      const exposedTools =
+        (Array.isArray(ctx?.availableTools) && ctx.availableTools) ||
+        (Array.isArray((event as any)?.availableTools) && (event as any).availableTools) ||
+        (Array.isArray(ctx?.tools) && ctx.tools) ||
+        (Array.isArray((event as any)?.tools) && (event as any).tools) ||
+        null;
+      if (
+        exposedTools &&
+        !exposedTools.some((t: any) =>
+          String(t?.name ?? t).startsWith("foundry_"),
+        )
+      ) {
+        // Explicit tool list present and foundry isn't in it → session can't call
+        // these tools; skip the ~2k-token block instead of advertising dead names.
+        logger.info?.(
+          "[foundry] skipped prompt injection — foundry tools not in this session's scope",
+        );
+        return {};
+      }
+
       return {
         prependContext: `${resumeContext}${workflowContext}${evolutionContext}${outcomeInsights}${learningsContext}
 ## Foundry: Self-Writing Coding Subagent
@@ -5591,7 +5616,7 @@ When you need a new capability:
 1. \`foundry_research\` — understand the API
 2. \`foundry_implement\` — get implementation guidance
 3. \`foundry_write_*\` or \`foundry_extend_self\` — write the code
-4. \`foundry_restart\` — restart gateway to load, auto-resumes
+4. \`foundry_restart\` — restart gateway to load (re-send context to resume; resume is not automatic)
 
 **Feedback Loop**: After tasks like social posts, track outcomes and collect metrics. Insights will improve future runs.
 **Workflow Learning**: I observe your tool sequences and suggest automation after repeated patterns.
