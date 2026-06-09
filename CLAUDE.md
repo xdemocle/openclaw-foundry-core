@@ -23,8 +23,13 @@ foundry_meta_search      — ADAS: LLM designs + scores novel agents (needs LLM 
 foundry_self_write       — Write a tool/hook/technique to the self-written store
 ```
 
-> The list above is the curated set. The extension actually registers **25** `foundry_*`
-> tools (grep `name: "foundry_` in index.ts). The rest are the Learning/Overseer surface:
+> The list above is the curated set. index.ts **defines 25** tool objects (grep
+> `name: "foundry_`), but only **23 are actually registered** — the `toolNames` array at
+> the `api.registerTool(tools, { names: toolNames })` call (index.ts ~line 5354) omits
+> **`foundry_write_browser_skill`** and **`foundry_write_hook`**, so they exist as code but
+> are never exposed. This is why the gateway startup log says `23 tools`, not 25. (If you
+> need either tool live, add its name to that `toolNames` array — don't just trust the
+> `name:` grep count.) The non-curated registered tools are the Learning/Overseer surface:
 > `foundry_overseer`, `foundry_crystallize`, `foundry_save_hook`, `foundry_metrics`,
 > `foundry_evolve`, `foundry_track_outcome`, `foundry_record_feedback`,
 > `foundry_get_insights`, `foundry_pending_feedback`, `foundry_apply_improvement`.
@@ -84,7 +89,7 @@ these classes (line numbers drift — grep for `class <Name>`):
 | `CodeWriter` (index.ts) | Generates extensions/skills/hooks from templates, writes to `~/.openclaw/...` |
 | `LearningEngine` (index.ts) | Records failures/resolutions → patterns; runs the hourly Overseer |
 | `CodeValidator` (index.ts) | Static security scan + isolated-process sandbox validation |
-| `register(api)` (index.ts, ~line 5380) | Plugin entry: `api.registerTool(tools, {names})` for all `foundry_*` tools, plus two real hooks — `api.on("before_tool_call")` (learning capture) and `api.on("before_agent_start")` (context injection). The `command:new`/`gateway:startup` events elsewhere in these docs are for *generated* hooks, not Foundry's own. |
+| `register(api)` (index.ts, ~line 5380) | Plugin entry: `api.registerTool(tools, {names})` for the `foundry_*` tools named in the `toolNames` array (23 of the 25 defined — see the tool-count note above), plus two real hooks — `api.on("before_tool_call")` (learning capture) and `api.on("before_agent_start")` (context injection). The `command:new`/`gateway:startup` events elsewhere in these docs are for *generated* hooks, not Foundry's own. |
 
 Helper modules in **`src/`** are **lazy-loaded at call time** via `await import("./src/<name>.js")`
 (note the `.js` specifier even though sources are `.ts`):
