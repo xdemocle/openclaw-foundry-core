@@ -5356,6 +5356,8 @@ ${p.hookCode}
       "foundry_implement",
       "foundry_write_extension",
       "foundry_write_skill",
+      "foundry_write_browser_skill",
+      "foundry_write_hook",
       "foundry_add_tool",
       "foundry_add_hook",
       "foundry_list",
@@ -5379,7 +5381,18 @@ ${p.hookCode}
       "foundry_self_write",
     ];
 
-    api.registerTool(tools, { names: toolNames });
+    // Materialize the tool list once and register each tool individually.
+    // The runtime's registerTool expects a single ToolDefinition per call
+    // (see registry-CqBKOOW_.js:3037). A factory returning an array is rejected
+    // with "plugin must declare contracts.tools before registering agent tools"
+    // — names check fails because the factory output is an array, not a tool.
+    // The xai/codex patterns pass a single-tool factory or object per call.
+    const toolList = (tools as any)({} as any) as Array<{ name: string; [k: string]: any }>;
+    for (const tool of toolList) {
+      if (toolNames.includes(tool.name)) {
+        api.registerTool(tool as any, { name: tool.name });
+      }
+    }
 
     // ── before_agent_start Hook ─────────────────────────────────────────────
     // Check for pending session (resume after restart) and inject learnings
